@@ -19,11 +19,12 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/hibiken/asynq/internal/timeutil"
-	"github.com/redis/go-redis/v9"
+	"github.com/redis/rueidis/rueidiscompat"
 )
 
 func TestInspectorQueues(t *testing.T) {
 	r := setup(t)
+	cl := rueidiscompat.NewAdapter(r)
 	defer r.Close()
 	inspector := NewInspector(getRedisConnOpt(t))
 
@@ -39,7 +40,7 @@ func TestInspectorQueues(t *testing.T) {
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 		for _, qname := range tc.queues {
-			if err := r.SAdd(context.Background(), base.AllQueues, qname).Err(); err != nil {
+			if err := cl.SAdd(context.Background(), base.AllQueues, qname).Err(); err != nil {
 				t.Fatalf("could not initialize all queue set: %v", err)
 			}
 		}
@@ -124,6 +125,7 @@ func TestInspectorDeleteQueue(t *testing.T) {
 		},
 	}
 
+	cl := rueidiscompat.NewAdapter(r)
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 		h.SeedAllPendingQueues(t, r, tc.pending)
@@ -138,7 +140,7 @@ func TestInspectorDeleteQueue(t *testing.T) {
 				tc.qname, tc.force, err)
 			continue
 		}
-		if r.SIsMember(context.Background(), base.AllQueues, tc.qname).Val() {
+		if cl.SIsMember(context.Background(), base.AllQueues, tc.qname).Val() {
 			t.Errorf("%q is a member of %q", tc.qname, base.AllQueues)
 		}
 	}
@@ -367,6 +369,7 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 		},
 	}
 
+	cl := rueidiscompat.NewAdapter(r)
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 		h.SeedAllPendingQueues(t, r, tc.pending)
@@ -377,23 +380,23 @@ func TestInspectorGetQueueInfo(t *testing.T) {
 		h.SeedAllCompletedQueues(t, r, tc.completed)
 		ctx := context.Background()
 		for qname, n := range tc.processed {
-			r.Set(ctx, base.ProcessedKey(qname, now), n, 0)
+			cl.Set(ctx, base.ProcessedKey(qname, now), n, 0)
 		}
 		for qname, n := range tc.failed {
-			r.Set(ctx, base.FailedKey(qname, now), n, 0)
+			cl.Set(ctx, base.FailedKey(qname, now), n, 0)
 		}
 		for qname, n := range tc.processedTotal {
-			r.Set(ctx, base.ProcessedTotalKey(qname), n, 0)
+			cl.Set(ctx, base.ProcessedTotalKey(qname), n, 0)
 		}
 		for qname, n := range tc.failedTotal {
-			r.Set(ctx, base.FailedTotalKey(qname), n, 0)
+			cl.Set(ctx, base.FailedTotalKey(qname), n, 0)
 		}
 		for qname, enqueueTime := range tc.oldestPendingMessageEnqueueTime {
 			if enqueueTime.IsZero() {
 				continue
 			}
-			oldestPendingMessageID := r.LRange(ctx, base.PendingKey(qname), -1, -1).Val()[0] // get the right most msg in the list
-			r.HSet(ctx, base.TaskKey(qname, oldestPendingMessageID), "pending_since", enqueueTime.UnixNano())
+			oldestPendingMessageID := cl.LRange(ctx, base.PendingKey(qname), -1, -1).Val()[0] // get the right most msg in the list
+			cl.HSet(ctx, base.TaskKey(qname, oldestPendingMessageID), "pending_since", enqueueTime.UnixNano())
 		}
 
 		got, err := inspector.GetQueueInfo(tc.qname)
@@ -426,17 +429,18 @@ func TestInspectorHistory(t *testing.T) {
 		{"default", 1},
 	}
 
+	cl := rueidiscompat.NewAdapter(r)
 	for _, tc := range tests {
 		h.FlushDB(t, r)
 
-		r.SAdd(context.Background(), base.AllQueues, tc.qname)
+		cl.SAdd(context.Background(), base.AllQueues, tc.qname)
 		// populate last n days data
 		for i := 0; i < tc.n; i++ {
 			ts := now.Add(-time.Duration(i) * 24 * time.Hour)
 			processedKey := base.ProcessedKey(tc.qname, ts)
 			failedKey := base.FailedKey(tc.qname, ts)
-			r.Set(context.Background(), processedKey, (i+1)*1000, 0)
-			r.Set(context.Background(), failedKey, (i+1)*10, 0)
+			cl.Set(context.Background(), processedKey, (i+1)*1000, 0)
+			cl.Set(context.Background(), failedKey, (i+1)*10, 0)
 		}
 
 		got, err := inspector.History(tc.qname, tc.n)
@@ -1138,7 +1142,7 @@ func TestInspectorListAggregatingTasks(t *testing.T) {
 		tasks     []*h.TaskSeedData
 		allQueues []string
 		allGroups map[string][]string
-		groups    map[string][]redis.Z
+		groups    map[string][]rueidiscompat.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -1152,7 +1156,7 @@ func TestInspectorListAggregatingTasks(t *testing.T) {
 			base.AllGroups("default"): {"group1", "group2"},
 			base.AllGroups("custom"):  {"group1"},
 		},
-		groups: map[string][]redis.Z{
+		groups: map[string][]rueidiscompat.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-30 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
@@ -3445,7 +3449,7 @@ func TestInspectorGroups(t *testing.T) {
 	fixtures := struct {
 		tasks     []*h.TaskSeedData
 		allGroups map[string][]string
-		groups    map[string][]redis.Z
+		groups    map[string][]rueidiscompat.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -3458,7 +3462,7 @@ func TestInspectorGroups(t *testing.T) {
 			base.AllGroups("default"): {"group1", "group2"},
 			base.AllGroups("custom"):  {"group1"},
 		},
-		groups: map[string][]redis.Z{
+		groups: map[string][]rueidiscompat.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-10 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-20 * time.Second).Unix())},

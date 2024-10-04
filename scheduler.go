@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/log"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/rueidis"
 	"github.com/robfig/cron/v3"
 )
 
@@ -28,7 +28,7 @@ type Scheduler struct {
 
 	logger          *log.Logger
 	client          *Client
-	rdb             *rdb.RDB
+	rdb             *rdb.RDBRueidis
 	cron            *cron.Cron
 	location        *time.Location
 	done            chan struct{}
@@ -48,7 +48,7 @@ type Scheduler struct {
 // NewScheduler returns a new Scheduler instance given the redis connection option.
 // The parameter opts is optional, defaults will be used if opts is set to nil
 func NewScheduler(r RedisConnOpt, opts *SchedulerOpts) *Scheduler {
-	c, ok := r.MakeRedisClient().(redis.UniversalClient)
+	c, ok := r.MakeRedisClient().(rueidis.Client)
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
@@ -132,7 +132,7 @@ type enqueueJob struct {
 	location        *time.Location
 	logger          *log.Logger
 	client          *Client
-	rdb             *rdb.RDB
+	rdb             *rdb.RDBRueidis
 	preEnqueueFunc  func(task *Task, opts []Option)
 	postEnqueueFunc func(info *TaskInfo, err error)
 	errHandler      func(task *Task, opts []Option, err error)

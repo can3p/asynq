@@ -18,7 +18,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/timeutil"
-	"github.com/redis/go-redis/v9"
+	"github.com/redis/rueidis"
+	"github.com/redis/rueidis/rueidiscompat"
 )
 
 // EquateInt64Approx returns a Comparer option that treats int64 values
@@ -93,16 +94,10 @@ var SortStringSliceOpt = cmp.Transformer("SortStringSlice", func(in []string) []
 	return out
 })
 
-var SortRedisZSetEntryOpt = cmp.Transformer("SortZSetEntries", func(in []redis.Z) []redis.Z {
-	out := append([]redis.Z(nil), in...) // Copy input to avoid mutating it
+var SortRedisZSetEntryOpt = cmp.Transformer("SortZSetEntries", func(in []rueidiscompat.Z) []rueidiscompat.Z {
+	out := append([]rueidiscompat.Z(nil), in...) // Copy input to avoid mutating it
 	sort.Slice(out, func(i, j int) bool {
-		// TODO: If member is a comparable type (int, string, etc) compare by the member
-		// Use generic comparable type here once update to go1.18
-		if _, ok := out[i].Member.(string); ok {
-			// If member is a string, compare the member
-			return out[i].Member.(string) < out[j].Member.(string)
-		}
-		return out[i].Score < out[j].Score
+		return out[i].Member < out[j].Member
 	})
 	return out
 })
@@ -190,94 +185,92 @@ func MustUnmarshal(tb testing.TB, data string) *base.TaskMessage {
 }
 
 // FlushDB deletes all the keys of the currently selected DB.
-func FlushDB(tb testing.TB, r redis.UniversalClient) {
+func FlushDB(tb testing.TB, cl rueidis.Client) {
 	tb.Helper()
-	switch r := r.(type) {
-	case *redis.Client:
-		if err := r.FlushDB(context.Background()).Err(); err != nil {
-			tb.Fatal(err)
-		}
-	case *redis.ClusterClient:
-		err := r.ForEachMaster(context.Background(), func(ctx context.Context, c *redis.Client) error {
-			if err := c.FlushAll(ctx).Err(); err != nil {
-				return err
-			}
-			return nil
-		})
-		if err != nil {
-			tb.Fatal(err)
-		}
+	compat := rueidiscompat.NewAdapter(cl)
+
+	if err := compat.FlushDB(context.Background()).Err(); err != nil {
+		tb.Fatal(err)
 	}
 }
 
 // SeedPendingQueue initializes the specified queue with the given messages.
-func SeedPendingQueue(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskMessage, qname string) {
+func SeedPendingQueue(tb testing.TB, cl rueidis.Client, msgs []*base.TaskMessage, qname string) {
+	r := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	r.SAdd(context.Background(), base.AllQueues, qname)
-	seedRedisList(tb, r, base.PendingKey(qname), msgs, base.TaskStatePending)
+	seedRedisList(tb, cl, base.PendingKey(qname), msgs, base.TaskStatePending)
 }
 
 // SeedActiveQueue initializes the active queue with the given messages.
-func SeedActiveQueue(tb testing.TB, r redis.UniversalClient, msgs []*base.TaskMessage, qname string) {
+func SeedActiveQueue(tb testing.TB, cl rueidis.Client, msgs []*base.TaskMessage, qname string) {
+	r := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	r.SAdd(context.Background(), base.AllQueues, qname)
-	seedRedisList(tb, r, base.ActiveKey(qname), msgs, base.TaskStateActive)
+	seedRedisList(tb, cl, base.ActiveKey(qname), msgs, base.TaskStateActive)
 }
 
 // SeedScheduledQueue initializes the scheduled queue with the given messages.
-func SeedScheduledQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
+func SeedScheduledQueue(tb testing.TB, cl rueidis.Client, entries []base.Z, qname string) {
+	r := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	r.SAdd(context.Background(), base.AllQueues, qname)
-	seedRedisZSet(tb, r, base.ScheduledKey(qname), entries, base.TaskStateScheduled)
+	seedRedisZSet(tb, cl, base.ScheduledKey(qname), entries, base.TaskStateScheduled)
 }
 
 // SeedRetryQueue initializes the retry queue with the given messages.
-func SeedRetryQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
+func SeedRetryQueue(tb testing.TB, cl rueidis.Client, entries []base.Z, qname string) {
+	r := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	r.SAdd(context.Background(), base.AllQueues, qname)
-	seedRedisZSet(tb, r, base.RetryKey(qname), entries, base.TaskStateRetry)
+	seedRedisZSet(tb, cl, base.RetryKey(qname), entries, base.TaskStateRetry)
 }
 
 // SeedArchivedQueue initializes the archived queue with the given messages.
-func SeedArchivedQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
+func SeedArchivedQueue(tb testing.TB, cl rueidis.Client, entries []base.Z, qname string) {
+	r := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	r.SAdd(context.Background(), base.AllQueues, qname)
-	seedRedisZSet(tb, r, base.ArchivedKey(qname), entries, base.TaskStateArchived)
+	seedRedisZSet(tb, cl, base.ArchivedKey(qname), entries, base.TaskStateArchived)
 }
 
 // SeedLease initializes the lease set with the given entries.
-func SeedLease(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
+func SeedLease(tb testing.TB, cl rueidis.Client, entries []base.Z, qname string) {
+	r := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	r.SAdd(context.Background(), base.AllQueues, qname)
-	seedRedisZSet(tb, r, base.LeaseKey(qname), entries, base.TaskStateActive)
+	seedRedisZSet(tb, cl, base.LeaseKey(qname), entries, base.TaskStateActive)
 }
 
 // SeedCompletedQueue initializes the completed set with the given entries.
-func SeedCompletedQueue(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname string) {
+func SeedCompletedQueue(tb testing.TB, cl rueidis.Client, entries []base.Z, qname string) {
+	r := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	r.SAdd(context.Background(), base.AllQueues, qname)
-	seedRedisZSet(tb, r, base.CompletedKey(qname), entries, base.TaskStateCompleted)
+	seedRedisZSet(tb, cl, base.CompletedKey(qname), entries, base.TaskStateCompleted)
 }
 
 // SeedGroup initializes the group with the given entries.
-func SeedGroup(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname, gname string) {
+func SeedGroup(tb testing.TB, cl rueidis.Client, entries []base.Z, qname, gname string) {
+	r := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	ctx := context.Background()
 	r.SAdd(ctx, base.AllQueues, qname)
 	r.SAdd(ctx, base.AllGroups(qname), gname)
-	seedRedisZSet(tb, r, base.GroupKey(qname, gname), entries, base.TaskStateAggregating)
+	seedRedisZSet(tb, cl, base.GroupKey(qname, gname), entries, base.TaskStateAggregating)
 }
 
-func SeedAggregationSet(tb testing.TB, r redis.UniversalClient, entries []base.Z, qname, gname, setID string) {
+func SeedAggregationSet(tb testing.TB, cl rueidis.Client, entries []base.Z, qname, gname, setID string) {
+	r := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	r.SAdd(context.Background(), base.AllQueues, qname)
-	seedRedisZSet(tb, r, base.AggregationSetKey(qname, gname, setID), entries, base.TaskStateAggregating)
+	seedRedisZSet(tb, cl, base.AggregationSetKey(qname, gname, setID), entries, base.TaskStateAggregating)
 }
 
 // SeedAllPendingQueues initializes all of the specified queues with the given messages.
 //
 // pending maps a queue name to a list of messages.
-func SeedAllPendingQueues(tb testing.TB, r redis.UniversalClient, pending map[string][]*base.TaskMessage) {
+func SeedAllPendingQueues(tb testing.TB, r rueidis.Client, pending map[string][]*base.TaskMessage) {
 	tb.Helper()
 	for q, msgs := range pending {
 		SeedPendingQueue(tb, r, msgs, q)
@@ -285,7 +278,7 @@ func SeedAllPendingQueues(tb testing.TB, r redis.UniversalClient, pending map[st
 }
 
 // SeedAllActiveQueues initializes all of the specified active queues with the given messages.
-func SeedAllActiveQueues(tb testing.TB, r redis.UniversalClient, active map[string][]*base.TaskMessage) {
+func SeedAllActiveQueues(tb testing.TB, r rueidis.Client, active map[string][]*base.TaskMessage) {
 	tb.Helper()
 	for q, msgs := range active {
 		SeedActiveQueue(tb, r, msgs, q)
@@ -293,7 +286,7 @@ func SeedAllActiveQueues(tb testing.TB, r redis.UniversalClient, active map[stri
 }
 
 // SeedAllScheduledQueues initializes all of the specified scheduled queues with the given entries.
-func SeedAllScheduledQueues(tb testing.TB, r redis.UniversalClient, scheduled map[string][]base.Z) {
+func SeedAllScheduledQueues(tb testing.TB, r rueidis.Client, scheduled map[string][]base.Z) {
 	tb.Helper()
 	for q, entries := range scheduled {
 		SeedScheduledQueue(tb, r, entries, q)
@@ -301,7 +294,7 @@ func SeedAllScheduledQueues(tb testing.TB, r redis.UniversalClient, scheduled ma
 }
 
 // SeedAllRetryQueues initializes all of the specified retry queues with the given entries.
-func SeedAllRetryQueues(tb testing.TB, r redis.UniversalClient, retry map[string][]base.Z) {
+func SeedAllRetryQueues(tb testing.TB, r rueidis.Client, retry map[string][]base.Z) {
 	tb.Helper()
 	for q, entries := range retry {
 		SeedRetryQueue(tb, r, entries, q)
@@ -309,7 +302,7 @@ func SeedAllRetryQueues(tb testing.TB, r redis.UniversalClient, retry map[string
 }
 
 // SeedAllArchivedQueues initializes all of the specified archived queues with the given entries.
-func SeedAllArchivedQueues(tb testing.TB, r redis.UniversalClient, archived map[string][]base.Z) {
+func SeedAllArchivedQueues(tb testing.TB, r rueidis.Client, archived map[string][]base.Z) {
 	tb.Helper()
 	for q, entries := range archived {
 		SeedArchivedQueue(tb, r, entries, q)
@@ -317,7 +310,7 @@ func SeedAllArchivedQueues(tb testing.TB, r redis.UniversalClient, archived map[
 }
 
 // SeedAllLease initializes all of the lease sets with the given entries.
-func SeedAllLease(tb testing.TB, r redis.UniversalClient, lease map[string][]base.Z) {
+func SeedAllLease(tb testing.TB, r rueidis.Client, lease map[string][]base.Z) {
 	tb.Helper()
 	for q, entries := range lease {
 		SeedLease(tb, r, entries, q)
@@ -325,7 +318,7 @@ func SeedAllLease(tb testing.TB, r redis.UniversalClient, lease map[string][]bas
 }
 
 // SeedAllCompletedQueues initializes all of the completed queues with the given entries.
-func SeedAllCompletedQueues(tb testing.TB, r redis.UniversalClient, completed map[string][]base.Z) {
+func SeedAllCompletedQueues(tb testing.TB, r rueidis.Client, completed map[string][]base.Z) {
 	tb.Helper()
 	for q, entries := range completed {
 		SeedCompletedQueue(tb, r, entries, q)
@@ -335,7 +328,7 @@ func SeedAllCompletedQueues(tb testing.TB, r redis.UniversalClient, completed ma
 // SeedAllGroups initializes all groups in all queues.
 // The map maps queue names to group names which maps to a list of task messages and the time it was
 // added to the group.
-func SeedAllGroups(tb testing.TB, r redis.UniversalClient, groups map[string]map[string][]base.Z) {
+func SeedAllGroups(tb testing.TB, r rueidis.Client, groups map[string]map[string][]base.Z) {
 	tb.Helper()
 	for qname, g := range groups {
 		for gname, entries := range g {
@@ -344,8 +337,9 @@ func SeedAllGroups(tb testing.TB, r redis.UniversalClient, groups map[string]map
 	}
 }
 
-func seedRedisList(tb testing.TB, c redis.UniversalClient, key string,
+func seedRedisList(tb testing.TB, cl rueidis.Client, key string,
 	msgs []*base.TaskMessage, state base.TaskState) {
+	c := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	for _, msg := range msgs {
 		encoded := MustMarshal(tb, msg)
@@ -371,13 +365,14 @@ func seedRedisList(tb testing.TB, c redis.UniversalClient, key string,
 	}
 }
 
-func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string,
+func seedRedisZSet(tb testing.TB, cl rueidis.Client, key string,
 	items []base.Z, state base.TaskState) {
+	c := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	for _, item := range items {
 		msg := item.Message
 		encoded := MustMarshal(tb, msg)
-		z := redis.Z{Member: msg.ID, Score: float64(item.Score)}
+		z := rueidiscompat.Z{Member: msg.ID, Score: float64(item.Score)}
 		if err := c.ZAdd(context.Background(), key, z).Err(); err != nil {
 			tb.Fatal(err)
 		}
@@ -402,92 +397,93 @@ func seedRedisZSet(tb testing.TB, c redis.UniversalClient, key string,
 
 // GetPendingMessages returns all pending messages in the given queue.
 // It also asserts the state field of the task.
-func GetPendingMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
+func GetPendingMessages(tb testing.TB, r rueidis.Client, qname string) []*base.TaskMessage {
 	tb.Helper()
 	return getMessagesFromList(tb, r, qname, base.PendingKey, base.TaskStatePending)
 }
 
 // GetActiveMessages returns all active messages in the given queue.
 // It also asserts the state field of the task.
-func GetActiveMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
+func GetActiveMessages(tb testing.TB, r rueidis.Client, qname string) []*base.TaskMessage {
 	tb.Helper()
 	return getMessagesFromList(tb, r, qname, base.ActiveKey, base.TaskStateActive)
 }
 
 // GetScheduledMessages returns all scheduled task messages in the given queue.
 // It also asserts the state field of the task.
-func GetScheduledMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
+func GetScheduledMessages(tb testing.TB, r rueidis.Client, qname string) []*base.TaskMessage {
 	tb.Helper()
 	return getMessagesFromZSet(tb, r, qname, base.ScheduledKey, base.TaskStateScheduled)
 }
 
 // GetRetryMessages returns all retry messages in the given queue.
 // It also asserts the state field of the task.
-func GetRetryMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
+func GetRetryMessages(tb testing.TB, r rueidis.Client, qname string) []*base.TaskMessage {
 	tb.Helper()
 	return getMessagesFromZSet(tb, r, qname, base.RetryKey, base.TaskStateRetry)
 }
 
 // GetArchivedMessages returns all archived messages in the given queue.
 // It also asserts the state field of the task.
-func GetArchivedMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
+func GetArchivedMessages(tb testing.TB, r rueidis.Client, qname string) []*base.TaskMessage {
 	tb.Helper()
 	return getMessagesFromZSet(tb, r, qname, base.ArchivedKey, base.TaskStateArchived)
 }
 
 // GetCompletedMessages returns all completed task messages in the given queue.
 // It also asserts the state field of the task.
-func GetCompletedMessages(tb testing.TB, r redis.UniversalClient, qname string) []*base.TaskMessage {
+func GetCompletedMessages(tb testing.TB, r rueidis.Client, qname string) []*base.TaskMessage {
 	tb.Helper()
 	return getMessagesFromZSet(tb, r, qname, base.CompletedKey, base.TaskStateCompleted)
 }
 
 // GetScheduledEntries returns all scheduled messages and its score in the given queue.
 // It also asserts the state field of the task.
-func GetScheduledEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
+func GetScheduledEntries(tb testing.TB, r rueidis.Client, qname string) []base.Z {
 	tb.Helper()
 	return getMessagesFromZSetWithScores(tb, r, qname, base.ScheduledKey, base.TaskStateScheduled)
 }
 
 // GetRetryEntries returns all retry messages and its score in the given queue.
 // It also asserts the state field of the task.
-func GetRetryEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
+func GetRetryEntries(tb testing.TB, r rueidis.Client, qname string) []base.Z {
 	tb.Helper()
 	return getMessagesFromZSetWithScores(tb, r, qname, base.RetryKey, base.TaskStateRetry)
 }
 
 // GetArchivedEntries returns all archived messages and its score in the given queue.
 // It also asserts the state field of the task.
-func GetArchivedEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
+func GetArchivedEntries(tb testing.TB, r rueidis.Client, qname string) []base.Z {
 	tb.Helper()
 	return getMessagesFromZSetWithScores(tb, r, qname, base.ArchivedKey, base.TaskStateArchived)
 }
 
 // GetLeaseEntries returns all task IDs and its score in the lease set for the given queue.
 // It also asserts the state field of the task.
-func GetLeaseEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
+func GetLeaseEntries(tb testing.TB, r rueidis.Client, qname string) []base.Z {
 	tb.Helper()
 	return getMessagesFromZSetWithScores(tb, r, qname, base.LeaseKey, base.TaskStateActive)
 }
 
 // GetCompletedEntries returns all completed messages and its score in the given queue.
 // It also asserts the state field of the task.
-func GetCompletedEntries(tb testing.TB, r redis.UniversalClient, qname string) []base.Z {
+func GetCompletedEntries(tb testing.TB, r rueidis.Client, qname string) []base.Z {
 	tb.Helper()
 	return getMessagesFromZSetWithScores(tb, r, qname, base.CompletedKey, base.TaskStateCompleted)
 }
 
 // GetGroupEntries returns all scheduled messages and its score in the given queue.
 // It also asserts the state field of the task.
-func GetGroupEntries(tb testing.TB, r redis.UniversalClient, qname, groupKey string) []base.Z {
+func GetGroupEntries(tb testing.TB, r rueidis.Client, qname, groupKey string) []base.Z {
 	tb.Helper()
 	return getMessagesFromZSetWithScores(tb, r, qname,
 		func(qname string) string { return base.GroupKey(qname, groupKey) }, base.TaskStateAggregating)
 }
 
 // Retrieves all messages stored under `keyFn(qname)` key in redis list.
-func getMessagesFromList(tb testing.TB, r redis.UniversalClient, qname string,
+func getMessagesFromList(tb testing.TB, cl rueidis.Client, qname string,
 	keyFn func(qname string) string, state base.TaskState) []*base.TaskMessage {
+	r := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	ids := r.LRange(context.Background(), keyFn(qname), 0, -1).Val()
 	var msgs []*base.TaskMessage
@@ -503,8 +499,9 @@ func getMessagesFromList(tb testing.TB, r redis.UniversalClient, qname string,
 }
 
 // Retrieves all messages stored under `keyFn(qname)` key in redis zset (sorted-set).
-func getMessagesFromZSet(tb testing.TB, r redis.UniversalClient, qname string,
+func getMessagesFromZSet(tb testing.TB, cl rueidis.Client, qname string,
 	keyFn func(qname string) string, state base.TaskState) []*base.TaskMessage {
+	r := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	ids := r.ZRange(context.Background(), keyFn(qname), 0, -1).Val()
 	var msgs []*base.TaskMessage
@@ -520,13 +517,14 @@ func getMessagesFromZSet(tb testing.TB, r redis.UniversalClient, qname string,
 }
 
 // Retrieves all messages along with their scores stored under `keyFn(qname)` key in redis zset (sorted-set).
-func getMessagesFromZSetWithScores(tb testing.TB, r redis.UniversalClient,
+func getMessagesFromZSetWithScores(tb testing.TB, cl rueidis.Client,
 	qname string, keyFn func(qname string) string, state base.TaskState) []base.Z {
+	r := rueidiscompat.NewAdapter(cl)
 	tb.Helper()
 	zs := r.ZRangeWithScores(context.Background(), keyFn(qname), 0, -1).Val()
 	var res []base.Z
 	for _, z := range zs {
-		taskID := z.Member.(string)
+		taskID := z.Member
 		taskKey := base.TaskKey(qname, taskID)
 		msg := r.HGet(context.Background(), taskKey, "msg").Val()
 		res = append(res, base.Z{Message: MustUnmarshal(tb, msg), Score: int64(z.Score)})
@@ -544,7 +542,8 @@ type TaskSeedData struct {
 	PendingSince time.Time
 }
 
-func SeedTasks(tb testing.TB, r redis.UniversalClient, taskData []*TaskSeedData) {
+func SeedTasks(tb testing.TB, cl rueidis.Client, taskData []*TaskSeedData) {
+	r := rueidiscompat.NewAdapter(cl)
 	for _, data := range taskData {
 		msg := data.Msg
 		ctx := context.Background()
@@ -570,7 +569,8 @@ func SeedTasks(tb testing.TB, r redis.UniversalClient, taskData []*TaskSeedData)
 	}
 }
 
-func SeedRedisZSets(tb testing.TB, r redis.UniversalClient, zsets map[string][]redis.Z) {
+func SeedRedisZSets(tb testing.TB, cl rueidis.Client, zsets map[string][]rueidiscompat.Z) {
+	r := rueidiscompat.NewAdapter(cl)
 	for key, zs := range zsets {
 		// FIXME: How come we can't simply do ZAdd(ctx, key, zs...) here?
 		for _, z := range zs {
@@ -581,13 +581,14 @@ func SeedRedisZSets(tb testing.TB, r redis.UniversalClient, zsets map[string][]r
 	}
 }
 
-func SeedRedisSets(tb testing.TB, r redis.UniversalClient, sets map[string][]string) {
+func SeedRedisSets(tb testing.TB, r rueidis.Client, sets map[string][]string) {
 	for key, set := range sets {
 		SeedRedisSet(tb, r, key, set)
 	}
 }
 
-func SeedRedisSet(tb testing.TB, r redis.UniversalClient, key string, members []string) {
+func SeedRedisSet(tb testing.TB, cl rueidis.Client, key string, members []string) {
+	r := rueidiscompat.NewAdapter(cl)
 	for _, mem := range members {
 		if err := r.SAdd(context.Background(), key, mem).Err(); err != nil {
 			tb.Fatalf("Failed to seed set (key=%q): %v", key, err)
@@ -595,7 +596,8 @@ func SeedRedisSet(tb testing.TB, r redis.UniversalClient, key string, members []
 	}
 }
 
-func SeedRedisLists(tb testing.TB, r redis.UniversalClient, lists map[string][]string) {
+func SeedRedisLists(tb testing.TB, cl rueidis.Client, lists map[string][]string) {
+	r := rueidiscompat.NewAdapter(cl)
 	for key, vals := range lists {
 		for _, v := range vals {
 			if err := r.LPush(context.Background(), key, v).Err(); err != nil {
@@ -605,7 +607,8 @@ func SeedRedisLists(tb testing.TB, r redis.UniversalClient, lists map[string][]s
 	}
 }
 
-func AssertRedisLists(t *testing.T, r redis.UniversalClient, wantLists map[string][]string) {
+func AssertRedisLists(t *testing.T, cl rueidis.Client, wantLists map[string][]string) {
+	r := rueidiscompat.NewAdapter(cl)
 	for key, want := range wantLists {
 		got, err := r.LRange(context.Background(), key, 0, -1).Result()
 		if err != nil {
@@ -617,7 +620,8 @@ func AssertRedisLists(t *testing.T, r redis.UniversalClient, wantLists map[strin
 	}
 }
 
-func AssertRedisSets(t *testing.T, r redis.UniversalClient, wantSets map[string][]string) {
+func AssertRedisSets(t *testing.T, cl rueidis.Client, wantSets map[string][]string) {
+	r := rueidiscompat.NewAdapter(cl)
 	for key, want := range wantSets {
 		got, err := r.SMembers(context.Background(), key).Result()
 		if err != nil {
@@ -629,7 +633,8 @@ func AssertRedisSets(t *testing.T, r redis.UniversalClient, wantSets map[string]
 	}
 }
 
-func AssertRedisZSets(t *testing.T, r redis.UniversalClient, wantZSets map[string][]redis.Z) {
+func AssertRedisZSets(t *testing.T, cl rueidis.Client, wantZSets map[string][]rueidiscompat.Z) {
+	r := rueidiscompat.NewAdapter(cl)
 	for key, want := range wantZSets {
 		got, err := r.ZRangeWithScores(context.Background(), key, 0, -1).Result()
 		if err != nil {

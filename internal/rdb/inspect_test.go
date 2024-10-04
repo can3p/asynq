@@ -19,7 +19,7 @@ import (
 	"github.com/hibiken/asynq/internal/errors"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/hibiken/asynq/internal/timeutil"
-	"github.com/redis/go-redis/v9"
+	"github.com/redis/rueidis/rueidiscompat"
 )
 
 func TestAllQueues(t *testing.T) {
@@ -36,7 +36,7 @@ func TestAllQueues(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
+		h.FlushDB(t, r.origClient)
 		for _, qname := range tc.queues {
 			if err := r.client.SAdd(context.Background(), base.AllQueues, qname).Err(); err != nil {
 				t.Fatalf("could not initialize all queue set: %v", err)
@@ -73,11 +73,11 @@ func TestCurrentStats(t *testing.T) {
 		allGroups                       map[string][]string
 		pending                         map[string][]string
 		active                          map[string][]string
-		scheduled                       map[string][]redis.Z
-		retry                           map[string][]redis.Z
-		archived                        map[string][]redis.Z
-		completed                       map[string][]redis.Z
-		groups                          map[string][]redis.Z
+		scheduled                       map[string][]rueidiscompat.Z
+		retry                           map[string][]rueidiscompat.Z
+		archived                        map[string][]rueidiscompat.Z
+		completed                       map[string][]rueidiscompat.Z
+		groups                          map[string][]rueidiscompat.Z
 		processed                       map[string]int
 		failed                          map[string]int
 		processedTotal                  map[string]int
@@ -111,7 +111,7 @@ func TestCurrentStats(t *testing.T) {
 				base.ActiveKey("critical"): {},
 				base.ActiveKey("low"):      {},
 			},
-			scheduled: map[string][]redis.Z{
+			scheduled: map[string][]rueidiscompat.Z{
 				base.ScheduledKey("default"): {
 					{Member: m3.ID, Score: float64(now.Add(time.Hour).Unix())},
 					{Member: m4.ID, Score: float64(now.Unix())},
@@ -119,22 +119,22 @@ func TestCurrentStats(t *testing.T) {
 				base.ScheduledKey("critical"): {},
 				base.ScheduledKey("low"):      {},
 			},
-			retry: map[string][]redis.Z{
+			retry: map[string][]rueidiscompat.Z{
 				base.RetryKey("default"):  {},
 				base.RetryKey("critical"): {},
 				base.RetryKey("low"):      {},
 			},
-			archived: map[string][]redis.Z{
+			archived: map[string][]rueidiscompat.Z{
 				base.ArchivedKey("default"):  {},
 				base.ArchivedKey("critical"): {},
 				base.ArchivedKey("low"):      {},
 			},
-			completed: map[string][]redis.Z{
+			completed: map[string][]rueidiscompat.Z{
 				base.CompletedKey("default"):  {},
 				base.CompletedKey("critical"): {},
 				base.CompletedKey("low"):      {},
 			},
-			groups: map[string][]redis.Z{
+			groups: map[string][]rueidiscompat.Z{
 				base.GroupKey("default", "sms:user1"): {
 					{Member: m7.ID, Score: float64(now.Add(-3 * time.Second).Unix())},
 				},
@@ -205,7 +205,7 @@ func TestCurrentStats(t *testing.T) {
 				base.ActiveKey("critical"): {},
 				base.ActiveKey("low"):      {},
 			},
-			scheduled: map[string][]redis.Z{
+			scheduled: map[string][]rueidiscompat.Z{
 				base.ScheduledKey("default"): {
 					{Member: m3.ID, Score: float64(now.Add(time.Hour).Unix())},
 					{Member: m4.ID, Score: float64(now.Unix())},
@@ -213,17 +213,17 @@ func TestCurrentStats(t *testing.T) {
 				base.ScheduledKey("critical"): {},
 				base.ScheduledKey("low"):      {},
 			},
-			retry: map[string][]redis.Z{
+			retry: map[string][]rueidiscompat.Z{
 				base.RetryKey("default"):  {},
 				base.RetryKey("critical"): {},
 				base.RetryKey("low"):      {},
 			},
-			archived: map[string][]redis.Z{
+			archived: map[string][]rueidiscompat.Z{
 				base.ArchivedKey("default"):  {},
 				base.ArchivedKey("critical"): {},
 				base.ArchivedKey("low"):      {},
 			},
-			completed: map[string][]redis.Z{
+			completed: map[string][]rueidiscompat.Z{
 				base.CompletedKey("default"):  {},
 				base.CompletedKey("critical"): {},
 				base.CompletedKey("low"):      {},
@@ -278,22 +278,22 @@ func TestCurrentStats(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
+		h.FlushDB(t, r.origClient) // clean up db before each test case
 		for _, qname := range tc.paused {
 			if err := r.Pause(qname); err != nil {
 				t.Fatal(err)
 			}
 		}
-		h.SeedRedisSet(t, r.client, base.AllQueues, tc.allQueues)
-		h.SeedRedisSets(t, r.client, tc.allGroups)
-		h.SeedTasks(t, r.client, tc.tasks)
-		h.SeedRedisLists(t, r.client, tc.pending)
-		h.SeedRedisLists(t, r.client, tc.active)
-		h.SeedRedisZSets(t, r.client, tc.scheduled)
-		h.SeedRedisZSets(t, r.client, tc.retry)
-		h.SeedRedisZSets(t, r.client, tc.archived)
-		h.SeedRedisZSets(t, r.client, tc.completed)
-		h.SeedRedisZSets(t, r.client, tc.groups)
+		h.SeedRedisSet(t, r.origClient, base.AllQueues, tc.allQueues)
+		h.SeedRedisSets(t, r.origClient, tc.allGroups)
+		h.SeedTasks(t, r.origClient, tc.tasks)
+		h.SeedRedisLists(t, r.origClient, tc.pending)
+		h.SeedRedisLists(t, r.origClient, tc.active)
+		h.SeedRedisZSets(t, r.origClient, tc.scheduled)
+		h.SeedRedisZSets(t, r.origClient, tc.retry)
+		h.SeedRedisZSets(t, r.origClient, tc.archived)
+		h.SeedRedisZSets(t, r.origClient, tc.completed)
+		h.SeedRedisZSets(t, r.origClient, tc.groups)
 		ctx := context.Background()
 		for qname, n := range tc.processed {
 			r.client.Set(ctx, base.ProcessedKey(qname, now), n, 0)
@@ -355,7 +355,7 @@ func TestHistoricalStats(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
+		h.FlushDB(t, r.origClient)
 
 		r.client.SAdd(context.Background(), base.AllQueues, tc.qname)
 		// populate last n days data
@@ -435,7 +435,7 @@ func TestGroupStats(t *testing.T) {
 	fixtures := struct {
 		tasks     []*h.TaskSeedData
 		allGroups map[string][]string
-		groups    map[string][]redis.Z
+		groups    map[string][]rueidiscompat.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -448,7 +448,7 @@ func TestGroupStats(t *testing.T) {
 			base.AllGroups("default"): {"group1", "group2"},
 			base.AllGroups("custom"):  {"group1"},
 		},
-		groups: map[string][]redis.Z{
+		groups: map[string][]rueidiscompat.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-10 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
@@ -497,10 +497,10 @@ func TestGroupStats(t *testing.T) {
 		})
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedTasks(t, r.client, fixtures.tasks)
-		h.SeedRedisSets(t, r.client, fixtures.allGroups)
-		h.SeedRedisZSets(t, r.client, fixtures.groups)
+		h.FlushDB(t, r.origClient)
+		h.SeedTasks(t, r.origClient, fixtures.tasks)
+		h.SeedRedisSets(t, r.origClient, fixtures.allGroups)
+		h.SeedRedisZSets(t, r.origClient, fixtures.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
 			got, err := r.GroupStats(tc.qname)
@@ -566,12 +566,12 @@ func TestGetTaskInfo(t *testing.T) {
 		},
 	}
 
-	h.SeedAllActiveQueues(t, r.client, fixtures.active)
-	h.SeedAllPendingQueues(t, r.client, fixtures.pending)
-	h.SeedAllScheduledQueues(t, r.client, fixtures.scheduled)
-	h.SeedAllRetryQueues(t, r.client, fixtures.retry)
-	h.SeedAllArchivedQueues(t, r.client, fixtures.archived)
-	h.SeedAllCompletedQueues(t, r.client, fixtures.completed)
+	h.SeedAllActiveQueues(t, r.origClient, fixtures.active)
+	h.SeedAllPendingQueues(t, r.origClient, fixtures.pending)
+	h.SeedAllScheduledQueues(t, r.origClient, fixtures.scheduled)
+	h.SeedAllRetryQueues(t, r.origClient, fixtures.retry)
+	h.SeedAllArchivedQueues(t, r.origClient, fixtures.archived)
+	h.SeedAllCompletedQueues(t, r.origClient, fixtures.completed)
 	// Write result data for the completed task.
 	if err := r.client.HSet(context.Background(), base.TaskKey(m6.Queue, m6.ID), "result", "foobar").Err(); err != nil {
 		t.Fatalf("Failed to write result data under task key: %v", err)
@@ -701,11 +701,11 @@ func TestGetTaskInfoError(t *testing.T) {
 		},
 	}
 
-	h.SeedAllActiveQueues(t, r.client, fixtures.active)
-	h.SeedAllPendingQueues(t, r.client, fixtures.pending)
-	h.SeedAllScheduledQueues(t, r.client, fixtures.scheduled)
-	h.SeedAllRetryQueues(t, r.client, fixtures.retry)
-	h.SeedAllArchivedQueues(t, r.client, fixtures.archived)
+	h.SeedAllActiveQueues(t, r.origClient, fixtures.active)
+	h.SeedAllPendingQueues(t, r.origClient, fixtures.pending)
+	h.SeedAllScheduledQueues(t, r.origClient, fixtures.scheduled)
+	h.SeedAllRetryQueues(t, r.origClient, fixtures.retry)
+	h.SeedAllArchivedQueues(t, r.origClient, fixtures.archived)
 
 	tests := []struct {
 		qname string
@@ -792,8 +792,8 @@ func TestListPending(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllPendingQueues(t, r.client, tc.pending)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllPendingQueues(t, r.origClient, tc.pending)
 
 		got, err := r.ListPending(tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListPending(%q, Pagination{Size: 20, Page: 0})", tc.qname)
@@ -817,7 +817,7 @@ func TestListPendingPagination(t *testing.T) {
 		msgs = append(msgs, msg)
 	}
 	// create 100 tasks in default queue
-	h.SeedPendingQueue(t, r.client, msgs, "default")
+	h.SeedPendingQueue(t, r.origClient, msgs, "default")
 
 	msgs = []*base.TaskMessage(nil) // empty list
 	for i := 0; i < 100; i++ {
@@ -825,7 +825,7 @@ func TestListPendingPagination(t *testing.T) {
 		msgs = append(msgs, msg)
 	}
 	// create 100 tasks in custom queue
-	h.SeedPendingQueue(t, r.client, msgs, "custom")
+	h.SeedPendingQueue(t, r.origClient, msgs, "custom")
 
 	tests := []struct {
 		desc      string
@@ -911,8 +911,8 @@ func TestListActive(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllActiveQueues(t, r.origClient, tc.inProgress)
 
 		got, err := r.ListActive(tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListActive(%q, Pagination{Size: 20, Page: 0})", tc.qname)
@@ -935,7 +935,7 @@ func TestListActivePagination(t *testing.T) {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
 		msgs = append(msgs, msg)
 	}
-	h.SeedActiveQueue(t, r.client, msgs, "default")
+	h.SeedActiveQueue(t, r.origClient, msgs, "default")
 
 	tests := []struct {
 		desc      string
@@ -1046,8 +1046,8 @@ func TestListScheduled(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllScheduledQueues(t, r.origClient, tc.scheduled)
 
 		got, err := r.ListScheduled(tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListScheduled(%q, Pagination{Size: 20, Page: 0})", tc.qname)
@@ -1200,8 +1200,8 @@ func TestListRetry(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllRetryQueues(t, r.client, tc.retry)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllRetryQueues(t, r.origClient, tc.retry)
 
 		got, err := r.ListRetry(tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListRetry(%q, Pagination{Size: 20, Page: 0})", tc.qname)
@@ -1228,7 +1228,7 @@ func TestListRetryPagination(t *testing.T) {
 		processAt := now.Add(time.Duration(i) * time.Second)
 		seed = append(seed, base.Z{Message: msg, Score: processAt.Unix()})
 	}
-	h.SeedRetryQueue(t, r.client, seed, "default")
+	h.SeedRetryQueue(t, r.origClient, seed, "default")
 
 	tests := []struct {
 		desc      string
@@ -1353,8 +1353,8 @@ func TestListArchived(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		got, err := r.ListArchived(tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListArchived(%q, Pagination{Size: 20, Page: 0})", tc.qname)
@@ -1378,7 +1378,7 @@ func TestListArchivedPagination(t *testing.T) {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
 		entries = append(entries, base.Z{Message: msg, Score: int64(i)})
 	}
-	h.SeedArchivedQueue(t, r.client, entries, "default")
+	h.SeedArchivedQueue(t, r.origClient, entries, "default")
 
 	tests := []struct {
 		desc      string
@@ -1493,8 +1493,8 @@ func TestListCompleted(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllCompletedQueues(t, r.client, tc.completed)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllCompletedQueues(t, r.origClient, tc.completed)
 
 		got, err := r.ListCompleted(tc.qname, Pagination{Size: 20, Page: 0})
 		op := fmt.Sprintf("r.ListCompleted(%q, Pagination{Size: 20, Page: 0})", tc.qname)
@@ -1518,7 +1518,7 @@ func TestListCompletedPagination(t *testing.T) {
 		msg := h.NewTaskMessage(fmt.Sprintf("task %d", i), nil)
 		entries = append(entries, base.Z{Message: msg, Score: int64(i)})
 	}
-	h.SeedCompletedQueue(t, r.client, entries, "default")
+	h.SeedCompletedQueue(t, r.origClient, entries, "default")
 
 	tests := []struct {
 		desc      string
@@ -1583,7 +1583,7 @@ func TestListAggregating(t *testing.T) {
 		tasks     []*h.TaskSeedData
 		allQueues []string
 		allGroups map[string][]string
-		groups    map[string][]redis.Z
+		groups    map[string][]rueidiscompat.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -1596,7 +1596,7 @@ func TestListAggregating(t *testing.T) {
 			base.AllGroups("default"): {"group1", "group2"},
 			base.AllGroups("custom"):  {"group3"},
 		},
-		groups: map[string][]redis.Z{
+		groups: map[string][]rueidiscompat.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-30 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
@@ -1636,11 +1636,11 @@ func TestListAggregating(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
-		h.SeedRedisSets(t, r.client, fxt.allGroups)
-		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisZSets(t, r.client, fxt.groups)
+		h.FlushDB(t, r.origClient)
+		h.SeedRedisSet(t, r.origClient, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSets(t, r.origClient, fxt.allGroups)
+		h.SeedTasks(t, r.origClient, fxt.tasks)
+		h.SeedRedisZSets(t, r.origClient, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
 			got, err := r.ListAggregating(tc.qname, tc.gname, Pagination{})
@@ -1663,14 +1663,14 @@ func TestListAggregatingPagination(t *testing.T) {
 		tasks     []*h.TaskSeedData
 		allQueues []string
 		allGroups map[string][]string
-		groups    map[string][]redis.Z
+		groups    map[string][]rueidiscompat.Z
 	}{
 		tasks:     []*h.TaskSeedData{}, // will be populated below
 		allQueues: []string{"default"},
 		allGroups: map[string][]string{
 			base.AllGroups("default"): {"mygroup"},
 		},
-		groups: map[string][]redis.Z{
+		groups: map[string][]rueidiscompat.Z{
 			groupkey: {}, // will be populated below
 		},
 	}
@@ -1681,7 +1681,7 @@ func TestListAggregatingPagination(t *testing.T) {
 		fxt.tasks = append(fxt.tasks, &h.TaskSeedData{
 			Msg: msg, State: base.TaskStateAggregating,
 		})
-		fxt.groups[groupkey] = append(fxt.groups[groupkey], redis.Z{
+		fxt.groups[groupkey] = append(fxt.groups[groupkey], rueidiscompat.Z{
 			Member: msg.ID,
 			Score:  float64(now.Add(-time.Duration(100-i) * time.Second).Unix()),
 		})
@@ -1750,11 +1750,11 @@ func TestListAggregatingPagination(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
-		h.SeedRedisSets(t, r.client, fxt.allGroups)
-		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisZSets(t, r.client, fxt.groups)
+		h.FlushDB(t, r.origClient)
+		h.SeedRedisSet(t, r.origClient, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSets(t, r.origClient, fxt.allGroups)
+		h.SeedTasks(t, r.origClient, fxt.tasks)
+		h.SeedRedisZSets(t, r.origClient, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
 			got, err := r.ListAggregating(tc.qname, tc.gname, Pagination{Page: tc.page, Size: tc.size})
@@ -1880,8 +1880,8 @@ func TestRunArchivedTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		if got := r.RunTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.RunTask(%q, %s) returned error: %v", tc.qname, tc.id, got)
@@ -1889,14 +1889,14 @@ func TestRunArchivedTask(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantPending {
-			gotPending := h.GetPendingMessages(t, r.client, qname)
+			gotPending := h.GetPendingMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
 			}
 		}
 
 		for qname, want := range tc.wantArchived {
-			gotArchived := h.GetArchivedMessages(t, r.client, qname)
+			gotArchived := h.GetArchivedMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q, (-want, +got)\n%s", base.ArchivedKey(qname), diff)
 			}
@@ -1960,8 +1960,8 @@ func TestRunRetryTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)                      // clean up db before each test case
-		h.SeedAllRetryQueues(t, r.client, tc.retry) // initialize retry queue
+		h.FlushDB(t, r.origClient)                      // clean up db before each test case
+		h.SeedAllRetryQueues(t, r.origClient, tc.retry) // initialize retry queue
 
 		if got := r.RunTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.RunTask(%q, %s) returned error: %v", tc.qname, tc.id, got)
@@ -1969,14 +1969,14 @@ func TestRunRetryTask(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantPending {
-			gotPending := h.GetPendingMessages(t, r.client, qname)
+			gotPending := h.GetPendingMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
 			}
 		}
 
 		for qname, want := range tc.wantRetry {
-			gotRetry := h.GetRetryMessages(t, r.client, qname)
+			gotRetry := h.GetRetryMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotRetry, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q, (-want, +got)\n%s", base.RetryKey(qname), diff)
 			}
@@ -1997,7 +1997,7 @@ func TestRunAggregatingTask(t *testing.T) {
 		tasks     []*h.TaskSeedData
 		allQueues []string
 		allGroups map[string][]string
-		groups    map[string][]redis.Z
+		groups    map[string][]rueidiscompat.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -2009,7 +2009,7 @@ func TestRunAggregatingTask(t *testing.T) {
 			base.AllGroups("default"): {"group1"},
 			base.AllGroups("custom"):  {"group1"},
 		},
-		groups: map[string][]redis.Z{
+		groups: map[string][]rueidiscompat.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
@@ -2026,7 +2026,7 @@ func TestRunAggregatingTask(t *testing.T) {
 		id            string
 		wantPending   map[string][]string
 		wantAllGroups map[string][]string
-		wantGroups    map[string][]redis.Z
+		wantGroups    map[string][]rueidiscompat.Z
 	}{
 		{
 			desc:  "schedules task from a group with multiple tasks",
@@ -2039,7 +2039,7 @@ func TestRunAggregatingTask(t *testing.T) {
 				base.AllGroups("default"): {"group1"},
 				base.AllGroups("custom"):  {"group1"},
 			},
-			wantGroups: map[string][]redis.Z{
+			wantGroups: map[string][]rueidiscompat.Z{
 				base.GroupKey("default", "group1"): {
 					{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
 				},
@@ -2059,7 +2059,7 @@ func TestRunAggregatingTask(t *testing.T) {
 				base.AllGroups("default"): {"group1"},
 				base.AllGroups("custom"):  {},
 			},
-			wantGroups: map[string][]redis.Z{
+			wantGroups: map[string][]rueidiscompat.Z{
 				base.GroupKey("default", "group1"): {
 					{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
 					{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
@@ -2070,11 +2070,11 @@ func TestRunAggregatingTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
-		h.SeedRedisSets(t, r.client, fxt.allGroups)
-		h.SeedRedisZSets(t, r.client, fxt.groups)
+		h.FlushDB(t, r.origClient)
+		h.SeedTasks(t, r.origClient, fxt.tasks)
+		h.SeedRedisSet(t, r.origClient, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSets(t, r.origClient, fxt.allGroups)
+		h.SeedRedisZSets(t, r.origClient, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
 			err := r.RunTask(tc.qname, tc.id)
@@ -2082,9 +2082,9 @@ func TestRunAggregatingTask(t *testing.T) {
 				t.Fatalf("RunTask returned error: %v", err)
 			}
 
-			h.AssertRedisLists(t, r.client, tc.wantPending)
-			h.AssertRedisZSets(t, r.client, tc.wantGroups)
-			h.AssertRedisSets(t, r.client, tc.wantAllGroups)
+			h.AssertRedisLists(t, r.origClient, tc.wantPending)
+			h.AssertRedisZSets(t, r.origClient, tc.wantGroups)
+			h.AssertRedisSets(t, r.origClient, tc.wantAllGroups)
 		})
 	}
 }
@@ -2145,8 +2145,8 @@ func TestRunScheduledTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllScheduledQueues(t, r.origClient, tc.scheduled)
 
 		if got := r.RunTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.RunTask(%q, %s) returned error: %v", tc.qname, tc.id, got)
@@ -2154,14 +2154,14 @@ func TestRunScheduledTask(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantPending {
-			gotPending := h.GetPendingMessages(t, r.client, qname)
+			gotPending := h.GetPendingMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
 			}
 		}
 
 		for qname, want := range tc.wantScheduled {
-			gotScheduled := h.GetScheduledMessages(t, r.client, qname)
+			gotScheduled := h.GetScheduledMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotScheduled, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q, (-want, +got)\n%s", base.ScheduledKey(qname), diff)
 			}
@@ -2290,10 +2290,10 @@ func TestRunTaskError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllActiveQueues(t, r.client, tc.active)
-		h.SeedAllPendingQueues(t, r.client, tc.pending)
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllActiveQueues(t, r.origClient, tc.active)
+		h.SeedAllPendingQueues(t, r.origClient, tc.pending)
+		h.SeedAllScheduledQueues(t, r.origClient, tc.scheduled)
 
 		got := r.RunTask(tc.qname, tc.id)
 		if !tc.match(got) {
@@ -2302,21 +2302,21 @@ func TestRunTaskError(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantActive {
-			gotActive := h.GetActiveMessages(t, r.client, qname)
+			gotActive := h.GetActiveMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q: (-want, +got)\n%s", base.ActiveKey(qname), diff)
 			}
 		}
 
 		for qname, want := range tc.wantPending {
-			gotPending := h.GetPendingMessages(t, r.client, qname)
+			gotPending := h.GetPendingMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
 			}
 		}
 
 		for qname, want := range tc.wantScheduled {
-			gotScheduled := h.GetScheduledMessages(t, r.client, qname)
+			gotScheduled := h.GetScheduledMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotScheduled, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q, (-want, +got)\n%s", base.ScheduledKey(qname), diff)
 			}
@@ -2400,8 +2400,8 @@ func TestRunAllScheduledTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllScheduledQueues(t, r.origClient, tc.scheduled)
 
 		got, err := r.RunAllScheduledTasks(tc.qname)
 		if err != nil {
@@ -2416,13 +2416,13 @@ func TestRunAllScheduledTasks(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantPending {
-			gotPending := h.GetPendingMessages(t, r.client, qname)
+			gotPending := h.GetPendingMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.PendingKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.wantScheduled {
-			gotScheduled := h.GetScheduledMessages(t, r.client, qname)
+			gotScheduled := h.GetScheduledMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotScheduled, h.SortMsgOpt); diff != "" {
 				t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.ScheduledKey(qname), diff)
 			}
@@ -2506,8 +2506,8 @@ func TestRunAllRetryTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllRetryQueues(t, r.client, tc.retry)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllRetryQueues(t, r.origClient, tc.retry)
 
 		got, err := r.RunAllRetryTasks(tc.qname)
 		if err != nil {
@@ -2522,13 +2522,13 @@ func TestRunAllRetryTasks(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantPending {
-			gotPending := h.GetPendingMessages(t, r.client, qname)
+			gotPending := h.GetPendingMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.PendingKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.wantRetry {
-			gotRetry := h.GetRetryMessages(t, r.client, qname)
+			gotRetry := h.GetRetryMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotRetry, h.SortMsgOpt); diff != "" {
 				t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.RetryKey(qname), diff)
 			}
@@ -2612,8 +2612,8 @@ func TestRunAllArchivedTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		got, err := r.RunAllArchivedTasks(tc.qname)
 		if err != nil {
@@ -2628,13 +2628,13 @@ func TestRunAllArchivedTasks(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantPending {
-			gotPending := h.GetPendingMessages(t, r.client, qname)
+			gotPending := h.GetPendingMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.PendingKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.wantArchived {
-			gotArchived := h.GetArchivedMessages(t, r.client, qname)
+			gotArchived := h.GetArchivedMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortMsgOpt); diff != "" {
 				t.Errorf("%s; mismatch found in %q; (-want, +got)\n%s", tc.desc, base.ArchivedKey(qname), diff)
 			}
@@ -2688,7 +2688,7 @@ func TestRunAllAggregatingTasks(t *testing.T) {
 		tasks     []*h.TaskSeedData
 		allQueues []string
 		allGroups map[string][]string
-		groups    map[string][]redis.Z
+		groups    map[string][]rueidiscompat.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -2700,7 +2700,7 @@ func TestRunAllAggregatingTasks(t *testing.T) {
 			base.AllGroups("default"): {"group1"},
 			base.AllGroups("custom"):  {"group2"},
 		},
-		groups: map[string][]redis.Z{
+		groups: map[string][]rueidiscompat.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
@@ -2717,7 +2717,7 @@ func TestRunAllAggregatingTasks(t *testing.T) {
 		gname         string
 		want          int64
 		wantPending   map[string][]string
-		wantGroups    map[string][]redis.Z
+		wantGroups    map[string][]rueidiscompat.Z
 		wantAllGroups map[string][]string
 	}{
 		{
@@ -2728,7 +2728,7 @@ func TestRunAllAggregatingTasks(t *testing.T) {
 			wantPending: map[string][]string{
 				base.PendingKey("default"): {m1.ID, m2.ID},
 			},
-			wantGroups: map[string][]redis.Z{
+			wantGroups: map[string][]rueidiscompat.Z{
 				base.GroupKey("default", "group1"): {},
 				base.GroupKey("custom", "group2"): {
 					{Member: m3.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
@@ -2747,7 +2747,7 @@ func TestRunAllAggregatingTasks(t *testing.T) {
 			wantPending: map[string][]string{
 				base.PendingKey("custom"): {m3.ID},
 			},
-			wantGroups: map[string][]redis.Z{
+			wantGroups: map[string][]rueidiscompat.Z{
 				base.GroupKey("default", "group1"): {
 					{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
 					{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
@@ -2762,11 +2762,11 @@ func TestRunAllAggregatingTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
-		h.SeedRedisSets(t, r.client, fxt.allGroups)
-		h.SeedRedisZSets(t, r.client, fxt.groups)
+		h.FlushDB(t, r.origClient)
+		h.SeedTasks(t, r.origClient, fxt.tasks)
+		h.SeedRedisSet(t, r.origClient, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSets(t, r.origClient, fxt.allGroups)
+		h.SeedRedisZSets(t, r.origClient, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
 			got, err := r.RunAllAggregatingTasks(tc.qname, tc.gname)
@@ -2776,9 +2776,9 @@ func TestRunAllAggregatingTasks(t *testing.T) {
 			if got != tc.want {
 				t.Errorf("RunAllAggregatingTasks = %d, want %d", got, tc.want)
 			}
-			h.AssertRedisLists(t, r.client, tc.wantPending)
-			h.AssertRedisZSets(t, r.client, tc.wantGroups)
-			h.AssertRedisSets(t, r.client, tc.wantAllGroups)
+			h.AssertRedisLists(t, r.origClient, tc.wantPending)
+			h.AssertRedisZSets(t, r.origClient, tc.wantGroups)
+			h.AssertRedisSets(t, r.origClient, tc.wantAllGroups)
 		})
 	}
 }
@@ -2856,9 +2856,9 @@ func TestArchiveRetryTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedAllRetryQueues(t, r.client, tc.retry)
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient)
+		h.SeedAllRetryQueues(t, r.origClient, tc.retry)
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		if got := r.ArchiveTask(tc.qname, tc.id); got != nil {
 			t.Errorf("(*RDB).ArchiveTask(%q, %v) returned error: %v",
@@ -2867,7 +2867,7 @@ func TestArchiveRetryTask(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantRetry {
-			gotRetry := h.GetRetryEntries(t, r.client, qname)
+			gotRetry := h.GetRetryEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.RetryKey(qname), diff)
@@ -2875,7 +2875,7 @@ func TestArchiveRetryTask(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantArchived {
-			gotArchived := h.GetArchivedEntries(t, r.client, qname)
+			gotArchived := h.GetArchivedEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
@@ -2957,9 +2957,9 @@ func TestArchiveScheduledTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient)
+		h.SeedAllScheduledQueues(t, r.origClient, tc.scheduled)
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		if got := r.ArchiveTask(tc.qname, tc.id); got != nil {
 			t.Errorf("(*RDB).ArchiveTask(%q, %v) returned error: %v",
@@ -2968,7 +2968,7 @@ func TestArchiveScheduledTask(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantScheduled {
-			gotScheduled := h.GetScheduledEntries(t, r.client, qname)
+			gotScheduled := h.GetScheduledEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ScheduledKey(qname), diff)
@@ -2976,7 +2976,7 @@ func TestArchiveScheduledTask(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantArchived {
-			gotArchived := h.GetArchivedEntries(t, r.client, qname)
+			gotArchived := h.GetArchivedEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
@@ -2998,7 +2998,7 @@ func TestArchiveAggregatingTask(t *testing.T) {
 		tasks     []*h.TaskSeedData
 		allQueues []string
 		allGroups map[string][]string
-		groups    map[string][]redis.Z
+		groups    map[string][]rueidiscompat.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -3010,7 +3010,7 @@ func TestArchiveAggregatingTask(t *testing.T) {
 			base.AllGroups("default"): {"group1"},
 			base.AllGroups("custom"):  {"group1"},
 		},
-		groups: map[string][]redis.Z{
+		groups: map[string][]rueidiscompat.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
@@ -3025,15 +3025,15 @@ func TestArchiveAggregatingTask(t *testing.T) {
 		desc          string
 		qname         string
 		id            string
-		wantArchived  map[string][]redis.Z
+		wantArchived  map[string][]rueidiscompat.Z
 		wantAllGroups map[string][]string
-		wantGroups    map[string][]redis.Z
+		wantGroups    map[string][]rueidiscompat.Z
 	}{
 		{
 			desc:  "archive task from a group with multiple tasks",
 			qname: "default",
 			id:    m1.ID,
-			wantArchived: map[string][]redis.Z{
+			wantArchived: map[string][]rueidiscompat.Z{
 				base.ArchivedKey("default"): {
 					{Member: m1.ID, Score: float64(now.Unix())},
 				},
@@ -3042,7 +3042,7 @@ func TestArchiveAggregatingTask(t *testing.T) {
 				base.AllGroups("default"): {"group1"},
 				base.AllGroups("custom"):  {"group1"},
 			},
-			wantGroups: map[string][]redis.Z{
+			wantGroups: map[string][]rueidiscompat.Z{
 				base.GroupKey("default", "group1"): {
 					{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
 				},
@@ -3055,7 +3055,7 @@ func TestArchiveAggregatingTask(t *testing.T) {
 			desc:  "archive task from a group with a single task",
 			qname: "custom",
 			id:    m3.ID,
-			wantArchived: map[string][]redis.Z{
+			wantArchived: map[string][]rueidiscompat.Z{
 				base.ArchivedKey("custom"): {
 					{Member: m3.ID, Score: float64(now.Unix())},
 				},
@@ -3064,7 +3064,7 @@ func TestArchiveAggregatingTask(t *testing.T) {
 				base.AllGroups("default"): {"group1"},
 				base.AllGroups("custom"):  {},
 			},
-			wantGroups: map[string][]redis.Z{
+			wantGroups: map[string][]rueidiscompat.Z{
 				base.GroupKey("default", "group1"): {
 					{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
 					{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
@@ -3075,11 +3075,11 @@ func TestArchiveAggregatingTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
-		h.SeedRedisSets(t, r.client, fxt.allGroups)
-		h.SeedRedisZSets(t, r.client, fxt.groups)
+		h.FlushDB(t, r.origClient)
+		h.SeedTasks(t, r.origClient, fxt.tasks)
+		h.SeedRedisSet(t, r.origClient, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSets(t, r.origClient, fxt.allGroups)
+		h.SeedRedisZSets(t, r.origClient, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
 			err := r.ArchiveTask(tc.qname, tc.id)
@@ -3087,9 +3087,9 @@ func TestArchiveAggregatingTask(t *testing.T) {
 				t.Fatalf("ArchiveTask returned error: %v", err)
 			}
 
-			h.AssertRedisZSets(t, r.client, tc.wantArchived)
-			h.AssertRedisZSets(t, r.client, tc.wantGroups)
-			h.AssertRedisSets(t, r.client, tc.wantAllGroups)
+			h.AssertRedisZSets(t, r.origClient, tc.wantArchived)
+			h.AssertRedisZSets(t, r.origClient, tc.wantGroups)
+			h.AssertRedisSets(t, r.origClient, tc.wantAllGroups)
 		})
 	}
 }
@@ -3149,9 +3149,9 @@ func TestArchivePendingTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedAllPendingQueues(t, r.client, tc.pending)
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient)
+		h.SeedAllPendingQueues(t, r.origClient, tc.pending)
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		if got := r.ArchiveTask(tc.qname, tc.id); got != nil {
 			t.Errorf("(*RDB).ArchiveTask(%q, %v) returned error: %v",
@@ -3160,7 +3160,7 @@ func TestArchivePendingTask(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantPending {
-			gotPending := h.GetPendingMessages(t, r.client, qname)
+			gotPending := h.GetPendingMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.PendingKey(qname), diff)
@@ -3168,7 +3168,7 @@ func TestArchivePendingTask(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantArchived {
-			gotArchived := h.GetArchivedEntries(t, r.client, qname)
+			gotArchived := h.GetArchivedEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
@@ -3296,10 +3296,10 @@ func TestArchiveTaskError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedAllActiveQueues(t, r.client, tc.active)
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient)
+		h.SeedAllActiveQueues(t, r.origClient, tc.active)
+		h.SeedAllScheduledQueues(t, r.origClient, tc.scheduled)
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		got := r.ArchiveTask(tc.qname, tc.id)
 		if !tc.match(got) {
@@ -3308,7 +3308,7 @@ func TestArchiveTaskError(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantActive {
-			gotActive := h.GetActiveMessages(t, r.client, qname)
+			gotActive := h.GetActiveMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s",
 					base.ActiveKey(qname), diff)
@@ -3316,7 +3316,7 @@ func TestArchiveTaskError(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantScheduled {
-			gotScheduled := h.GetScheduledEntries(t, r.client, qname)
+			gotScheduled := h.GetScheduledEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ScheduledKey(qname), diff)
@@ -3324,7 +3324,7 @@ func TestArchiveTaskError(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantArchived {
-			gotArchived := h.GetArchivedEntries(t, r.client, qname)
+			gotArchived := h.GetArchivedEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt, zScoreCmpOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
@@ -3440,9 +3440,9 @@ func TestArchiveAllPendingTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedAllPendingQueues(t, r.client, tc.pending)
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient)
+		h.SeedAllPendingQueues(t, r.origClient, tc.pending)
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		got, err := r.ArchiveAllPendingTasks(tc.qname)
 		if got != tc.want || err != nil {
@@ -3452,7 +3452,7 @@ func TestArchiveAllPendingTasks(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantPending {
-			gotPending := h.GetPendingMessages(t, r.client, qname)
+			gotPending := h.GetPendingMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.PendingKey(qname), diff)
@@ -3460,7 +3460,7 @@ func TestArchiveAllPendingTasks(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantArchived {
-			gotArchived := h.GetArchivedEntries(t, r.client, qname)
+			gotArchived := h.GetArchivedEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
@@ -3483,7 +3483,7 @@ func TestArchiveAllAggregatingTasks(t *testing.T) {
 		tasks     []*h.TaskSeedData
 		allQueues []string
 		allGroups map[string][]string
-		groups    map[string][]redis.Z
+		groups    map[string][]rueidiscompat.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -3495,7 +3495,7 @@ func TestArchiveAllAggregatingTasks(t *testing.T) {
 			base.AllGroups("default"): {"group1"},
 			base.AllGroups("custom"):  {"group2"},
 		},
-		groups: map[string][]redis.Z{
+		groups: map[string][]rueidiscompat.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
@@ -3511,8 +3511,8 @@ func TestArchiveAllAggregatingTasks(t *testing.T) {
 		qname         string
 		gname         string
 		want          int64
-		wantArchived  map[string][]redis.Z
-		wantGroups    map[string][]redis.Z
+		wantArchived  map[string][]rueidiscompat.Z
+		wantGroups    map[string][]rueidiscompat.Z
 		wantAllGroups map[string][]string
 	}{
 		{
@@ -3520,13 +3520,13 @@ func TestArchiveAllAggregatingTasks(t *testing.T) {
 			qname: "default",
 			gname: "group1",
 			want:  2,
-			wantArchived: map[string][]redis.Z{
+			wantArchived: map[string][]rueidiscompat.Z{
 				base.ArchivedKey("default"): {
 					{Member: m1.ID, Score: float64(now.Unix())},
 					{Member: m2.ID, Score: float64(now.Unix())},
 				},
 			},
-			wantGroups: map[string][]redis.Z{
+			wantGroups: map[string][]rueidiscompat.Z{
 				base.GroupKey("default", "group1"): {},
 				base.GroupKey("custom", "group2"): {
 					{Member: m3.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
@@ -3542,12 +3542,12 @@ func TestArchiveAllAggregatingTasks(t *testing.T) {
 			qname: "custom",
 			gname: "group2",
 			want:  1,
-			wantArchived: map[string][]redis.Z{
+			wantArchived: map[string][]rueidiscompat.Z{
 				base.ArchivedKey("custom"): {
 					{Member: m3.ID, Score: float64(now.Unix())},
 				},
 			},
-			wantGroups: map[string][]redis.Z{
+			wantGroups: map[string][]rueidiscompat.Z{
 				base.GroupKey("default", "group1"): {
 					{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
 					{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
@@ -3562,11 +3562,11 @@ func TestArchiveAllAggregatingTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
-		h.SeedRedisSets(t, r.client, fxt.allGroups)
-		h.SeedRedisZSets(t, r.client, fxt.groups)
+		h.FlushDB(t, r.origClient)
+		h.SeedTasks(t, r.origClient, fxt.tasks)
+		h.SeedRedisSet(t, r.origClient, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSets(t, r.origClient, fxt.allGroups)
+		h.SeedRedisZSets(t, r.origClient, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
 			got, err := r.ArchiveAllAggregatingTasks(tc.qname, tc.gname)
@@ -3576,9 +3576,9 @@ func TestArchiveAllAggregatingTasks(t *testing.T) {
 			if got != tc.want {
 				t.Errorf("ArchiveAllAggregatingTasks = %d, want %d", got, tc.want)
 			}
-			h.AssertRedisZSets(t, r.client, tc.wantArchived)
-			h.AssertRedisZSets(t, r.client, tc.wantGroups)
-			h.AssertRedisSets(t, r.client, tc.wantAllGroups)
+			h.AssertRedisZSets(t, r.origClient, tc.wantArchived)
+			h.AssertRedisZSets(t, r.origClient, tc.wantGroups)
+			h.AssertRedisSets(t, r.origClient, tc.wantAllGroups)
 		})
 	}
 }
@@ -3704,9 +3704,9 @@ func TestArchiveAllRetryTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedAllRetryQueues(t, r.client, tc.retry)
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient)
+		h.SeedAllRetryQueues(t, r.origClient, tc.retry)
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		got, err := r.ArchiveAllRetryTasks(tc.qname)
 		if got != tc.want || err != nil {
@@ -3716,7 +3716,7 @@ func TestArchiveAllRetryTasks(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantRetry {
-			gotRetry := h.GetRetryEntries(t, r.client, qname)
+			gotRetry := h.GetRetryEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.RetryKey(qname), diff)
@@ -3724,7 +3724,7 @@ func TestArchiveAllRetryTasks(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantArchived {
-			gotArchived := h.GetArchivedEntries(t, r.client, qname)
+			gotArchived := h.GetArchivedEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
@@ -3854,9 +3854,9 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient)
+		h.SeedAllScheduledQueues(t, r.origClient, tc.scheduled)
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		got, err := r.ArchiveAllScheduledTasks(tc.qname)
 		if got != tc.want || err != nil {
@@ -3866,7 +3866,7 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantScheduled {
-			gotScheduled := h.GetScheduledEntries(t, r.client, qname)
+			gotScheduled := h.GetScheduledEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ScheduledKey(qname), diff)
@@ -3874,7 +3874,7 @@ func TestArchiveAllScheduledTasks(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantArchived {
-			gotArchived := h.GetArchivedEntries(t, r.client, qname)
+			gotArchived := h.GetArchivedEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want,+got)\n%s",
 					base.ArchivedKey(qname), diff)
@@ -3961,8 +3961,8 @@ func TestDeleteArchivedTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
@@ -3970,7 +3970,7 @@ func TestDeleteArchivedTask(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantArchived {
-			gotArchived := h.GetArchivedMessages(t, r.client, qname)
+			gotArchived := h.GetArchivedMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ArchivedKey(qname), diff)
 			}
@@ -4027,8 +4027,8 @@ func TestDeleteRetryTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllRetryQueues(t, r.client, tc.retry)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllRetryQueues(t, r.origClient, tc.retry)
 
 		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
@@ -4036,7 +4036,7 @@ func TestDeleteRetryTask(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantRetry {
-			gotRetry := h.GetRetryMessages(t, r.client, qname)
+			gotRetry := h.GetRetryMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotRetry, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryKey(qname), diff)
 			}
@@ -4093,8 +4093,8 @@ func TestDeleteScheduledTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllScheduledQueues(t, r.origClient, tc.scheduled)
 
 		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
@@ -4102,7 +4102,7 @@ func TestDeleteScheduledTask(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantScheduled {
-			gotScheduled := h.GetScheduledMessages(t, r.client, qname)
+			gotScheduled := h.GetScheduledMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotScheduled, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ScheduledKey(qname), diff)
 			}
@@ -4122,7 +4122,7 @@ func TestDeleteAggregatingTask(t *testing.T) {
 		tasks     []*h.TaskSeedData
 		allQueues []string
 		allGroups map[string][]string
-		groups    map[string][]redis.Z
+		groups    map[string][]rueidiscompat.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -4134,7 +4134,7 @@ func TestDeleteAggregatingTask(t *testing.T) {
 			base.AllGroups("default"): {"group1"},
 			base.AllGroups("custom"):  {"group1"},
 		},
-		groups: map[string][]redis.Z{
+		groups: map[string][]rueidiscompat.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
@@ -4150,7 +4150,7 @@ func TestDeleteAggregatingTask(t *testing.T) {
 		qname         string
 		id            string
 		wantAllGroups map[string][]string
-		wantGroups    map[string][]redis.Z
+		wantGroups    map[string][]rueidiscompat.Z
 	}{
 		{
 			desc:  "deletes a task from group with multiple tasks",
@@ -4160,7 +4160,7 @@ func TestDeleteAggregatingTask(t *testing.T) {
 				base.AllGroups("default"): {"group1"},
 				base.AllGroups("custom"):  {"group1"},
 			},
-			wantGroups: map[string][]redis.Z{
+			wantGroups: map[string][]rueidiscompat.Z{
 				base.GroupKey("default", "group1"): {
 					{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
 				},
@@ -4177,7 +4177,7 @@ func TestDeleteAggregatingTask(t *testing.T) {
 				base.AllGroups("default"): {"group1"},
 				base.AllGroups("custom"):  {}, // should be clear out group from all-groups set
 			},
-			wantGroups: map[string][]redis.Z{
+			wantGroups: map[string][]rueidiscompat.Z{
 				base.GroupKey("default", "group1"): {
 					{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
 					{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
@@ -4188,19 +4188,19 @@ func TestDeleteAggregatingTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
-		h.SeedRedisSets(t, r.client, fxt.allGroups)
-		h.SeedRedisZSets(t, r.client, fxt.groups)
+		h.FlushDB(t, r.origClient)
+		h.SeedTasks(t, r.origClient, fxt.tasks)
+		h.SeedRedisSet(t, r.origClient, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSets(t, r.origClient, fxt.allGroups)
+		h.SeedRedisZSets(t, r.origClient, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
 			err := r.DeleteTask(tc.qname, tc.id)
 			if err != nil {
 				t.Fatalf("DeleteTask returned error: %v", err)
 			}
-			h.AssertRedisSets(t, r.client, tc.wantAllGroups)
-			h.AssertRedisZSets(t, r.client, tc.wantGroups)
+			h.AssertRedisSets(t, r.origClient, tc.wantAllGroups)
+			h.AssertRedisZSets(t, r.origClient, tc.wantGroups)
 		})
 	}
 }
@@ -4243,8 +4243,8 @@ func TestDeletePendingTask(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedAllPendingQueues(t, r.client, tc.pending)
+		h.FlushDB(t, r.origClient)
+		h.SeedAllPendingQueues(t, r.origClient, tc.pending)
 
 		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
@@ -4252,7 +4252,7 @@ func TestDeletePendingTask(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantPending {
-			gotPending := h.GetPendingMessages(t, r.client, qname)
+			gotPending := h.GetPendingMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
 			}
@@ -4295,8 +4295,8 @@ func TestDeleteTaskWithUniqueLock(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllScheduledQueues(t, r.origClient, tc.scheduled)
 
 		if got := r.DeleteTask(tc.qname, tc.id); got != nil {
 			t.Errorf("r.DeleteTask(%q, %v) returned error: %v", tc.qname, tc.id, got)
@@ -4304,7 +4304,7 @@ func TestDeleteTaskWithUniqueLock(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantScheduled {
-			gotScheduled := h.GetScheduledMessages(t, r.client, qname)
+			gotScheduled := h.GetScheduledMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotScheduled, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ScheduledKey(qname), diff)
 			}
@@ -4389,9 +4389,9 @@ func TestDeleteTaskError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllActiveQueues(t, r.client, tc.active)
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllActiveQueues(t, r.origClient, tc.active)
+		h.SeedAllScheduledQueues(t, r.origClient, tc.scheduled)
 
 		got := r.DeleteTask(tc.qname, tc.id)
 		if !tc.match(got) {
@@ -4400,14 +4400,14 @@ func TestDeleteTaskError(t *testing.T) {
 		}
 
 		for qname, want := range tc.wantActive {
-			gotActive := h.GetActiveMessages(t, r.client, qname)
+			gotActive := h.GetActiveMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ActiveKey(qname), diff)
 			}
 		}
 
 		for qname, want := range tc.wantScheduled {
-			gotScheduled := h.GetScheduledMessages(t, r.client, qname)
+			gotScheduled := h.GetScheduledMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotScheduled, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ScheduledKey(qname), diff)
 			}
@@ -4458,8 +4458,8 @@ func TestDeleteAllArchivedTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		got, err := r.DeleteAllArchivedTasks(tc.qname)
 		if err != nil {
@@ -4469,7 +4469,7 @@ func TestDeleteAllArchivedTasks(t *testing.T) {
 			t.Errorf("r.DeleteAllArchivedTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantArchived {
-			gotArchived := h.GetArchivedMessages(t, r.client, qname)
+			gotArchived := h.GetArchivedMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ArchivedKey(qname), diff)
 			}
@@ -4528,8 +4528,8 @@ func TestDeleteAllCompletedTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllCompletedQueues(t, r.client, tc.completed)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllCompletedQueues(t, r.origClient, tc.completed)
 
 		got, err := r.DeleteAllCompletedTasks(tc.qname)
 		if err != nil {
@@ -4539,7 +4539,7 @@ func TestDeleteAllCompletedTasks(t *testing.T) {
 			t.Errorf("r.DeleteAllCompletedTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantCompleted {
-			gotCompleted := h.GetCompletedMessages(t, r.client, qname)
+			gotCompleted := h.GetCompletedMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotCompleted, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.CompletedKey(qname), diff)
 			}
@@ -4595,8 +4595,8 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		got, err := r.DeleteAllArchivedTasks(tc.qname)
 		if err != nil {
@@ -4606,7 +4606,7 @@ func TestDeleteAllArchivedTasksWithUniqueKey(t *testing.T) {
 			t.Errorf("r.DeleteAllArchivedTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantArchived {
-			gotArchived := h.GetArchivedMessages(t, r.client, qname)
+			gotArchived := h.GetArchivedMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ArchivedKey(qname), diff)
 			}
@@ -4663,8 +4663,8 @@ func TestDeleteAllRetryTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllRetryQueues(t, r.client, tc.retry)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllRetryQueues(t, r.origClient, tc.retry)
 
 		got, err := r.DeleteAllRetryTasks(tc.qname)
 		if err != nil {
@@ -4674,7 +4674,7 @@ func TestDeleteAllRetryTasks(t *testing.T) {
 			t.Errorf("r.DeleteAllRetryTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantRetry {
-			gotRetry := h.GetRetryMessages(t, r.client, qname)
+			gotRetry := h.GetRetryMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotRetry, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.RetryKey(qname), diff)
 			}
@@ -4725,8 +4725,8 @@ func TestDeleteAllScheduledTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllScheduledQueues(t, r.origClient, tc.scheduled)
 
 		got, err := r.DeleteAllScheduledTasks(tc.qname)
 		if err != nil {
@@ -4736,7 +4736,7 @@ func TestDeleteAllScheduledTasks(t *testing.T) {
 			t.Errorf("r.DeleteAllScheduledTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantScheduled {
-			gotScheduled := h.GetScheduledMessages(t, r.client, qname)
+			gotScheduled := h.GetScheduledMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotScheduled, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.ScheduledKey(qname), diff)
 			}
@@ -4756,7 +4756,7 @@ func TestDeleteAllAggregatingTasks(t *testing.T) {
 		tasks     []*h.TaskSeedData
 		allQueues []string
 		allGroups map[string][]string
-		groups    map[string][]redis.Z
+		groups    map[string][]rueidiscompat.Z
 	}{
 		tasks: []*h.TaskSeedData{
 			{Msg: m1, State: base.TaskStateAggregating},
@@ -4768,7 +4768,7 @@ func TestDeleteAllAggregatingTasks(t *testing.T) {
 			base.AllGroups("default"): {"group1"},
 			base.AllGroups("custom"):  {"group1"},
 		},
-		groups: map[string][]redis.Z{
+		groups: map[string][]rueidiscompat.Z{
 			base.GroupKey("default", "group1"): {
 				{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
 				{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
@@ -4785,7 +4785,7 @@ func TestDeleteAllAggregatingTasks(t *testing.T) {
 		gname         string
 		want          int64
 		wantAllGroups map[string][]string
-		wantGroups    map[string][]redis.Z
+		wantGroups    map[string][]rueidiscompat.Z
 	}{
 		{
 			desc:  "default queue group1",
@@ -4796,7 +4796,7 @@ func TestDeleteAllAggregatingTasks(t *testing.T) {
 				base.AllGroups("default"): {},
 				base.AllGroups("custom"):  {"group1"},
 			},
-			wantGroups: map[string][]redis.Z{
+			wantGroups: map[string][]rueidiscompat.Z{
 				base.GroupKey("default", "group1"): nil,
 				base.GroupKey("custom", "group1"): {
 					{Member: m3.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
@@ -4812,7 +4812,7 @@ func TestDeleteAllAggregatingTasks(t *testing.T) {
 				base.AllGroups("default"): {"group1"},
 				base.AllGroups("custom"):  {},
 			},
-			wantGroups: map[string][]redis.Z{
+			wantGroups: map[string][]rueidiscompat.Z{
 				base.GroupKey("default", "group1"): {
 					{Member: m1.ID, Score: float64(now.Add(-20 * time.Second).Unix())},
 					{Member: m2.ID, Score: float64(now.Add(-25 * time.Second).Unix())},
@@ -4823,11 +4823,11 @@ func TestDeleteAllAggregatingTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedTasks(t, r.client, fxt.tasks)
-		h.SeedRedisSet(t, r.client, base.AllQueues, fxt.allQueues)
-		h.SeedRedisSets(t, r.client, fxt.allGroups)
-		h.SeedRedisZSets(t, r.client, fxt.groups)
+		h.FlushDB(t, r.origClient)
+		h.SeedTasks(t, r.origClient, fxt.tasks)
+		h.SeedRedisSet(t, r.origClient, base.AllQueues, fxt.allQueues)
+		h.SeedRedisSets(t, r.origClient, fxt.allGroups)
+		h.SeedRedisZSets(t, r.origClient, fxt.groups)
 
 		t.Run(tc.desc, func(t *testing.T) {
 			got, err := r.DeleteAllAggregatingTasks(tc.qname, tc.gname)
@@ -4837,8 +4837,8 @@ func TestDeleteAllAggregatingTasks(t *testing.T) {
 			if got != tc.want {
 				t.Errorf("DeleteAllAggregatingTasks = %d, want %d", got, tc.want)
 			}
-			h.AssertRedisSets(t, r.client, tc.wantAllGroups)
-			h.AssertRedisZSets(t, r.client, tc.wantGroups)
+			h.AssertRedisSets(t, r.origClient, tc.wantAllGroups)
+			h.AssertRedisZSets(t, r.origClient, tc.wantGroups)
 		})
 	}
 }
@@ -4881,8 +4881,8 @@ func TestDeleteAllPendingTasks(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client) // clean up db before each test case
-		h.SeedAllPendingQueues(t, r.client, tc.pending)
+		h.FlushDB(t, r.origClient) // clean up db before each test case
+		h.SeedAllPendingQueues(t, r.origClient, tc.pending)
 
 		got, err := r.DeleteAllPendingTasks(tc.qname)
 		if err != nil {
@@ -4892,7 +4892,7 @@ func TestDeleteAllPendingTasks(t *testing.T) {
 			t.Errorf("r.DeleteAllPendingTasks(%q) = %d, nil, want %d, nil", tc.qname, got, tc.want)
 		}
 		for qname, want := range tc.wantPending {
-			gotPending := h.GetPendingMessages(t, r.client, qname)
+			gotPending := h.GetPendingMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("mismatch found in %q; (-want, +got)\n%s", base.PendingKey(qname), diff)
 			}
@@ -5000,12 +5000,12 @@ func TestRemoveQueue(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedAllPendingQueues(t, r.client, tc.pending)
-		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
-		h.SeedAllRetryQueues(t, r.client, tc.retry)
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient)
+		h.SeedAllPendingQueues(t, r.origClient, tc.pending)
+		h.SeedAllActiveQueues(t, r.origClient, tc.inProgress)
+		h.SeedAllScheduledQueues(t, r.origClient, tc.scheduled)
+		h.SeedAllRetryQueues(t, r.origClient, tc.retry)
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		err := r.RemoveQueue(tc.qname, tc.force)
 		if err != nil {
@@ -5138,12 +5138,12 @@ func TestRemoveQueueError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
-		h.SeedAllPendingQueues(t, r.client, tc.pending)
-		h.SeedAllActiveQueues(t, r.client, tc.inProgress)
-		h.SeedAllScheduledQueues(t, r.client, tc.scheduled)
-		h.SeedAllRetryQueues(t, r.client, tc.retry)
-		h.SeedAllArchivedQueues(t, r.client, tc.archived)
+		h.FlushDB(t, r.origClient)
+		h.SeedAllPendingQueues(t, r.origClient, tc.pending)
+		h.SeedAllActiveQueues(t, r.origClient, tc.inProgress)
+		h.SeedAllScheduledQueues(t, r.origClient, tc.scheduled)
+		h.SeedAllRetryQueues(t, r.origClient, tc.retry)
+		h.SeedAllArchivedQueues(t, r.origClient, tc.archived)
 
 		got := r.RemoveQueue(tc.qname, tc.force)
 		if !tc.match(got) {
@@ -5153,31 +5153,31 @@ func TestRemoveQueueError(t *testing.T) {
 
 		// Make sure that nothing changed
 		for qname, want := range tc.pending {
-			gotPending := h.GetPendingMessages(t, r.client, qname)
+			gotPending := h.GetPendingMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotPending, h.SortMsgOpt); diff != "" {
 				t.Errorf("%s;mismatch found in %q; (-want,+got):\n%s", tc.desc, base.PendingKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.inProgress {
-			gotActive := h.GetActiveMessages(t, r.client, qname)
+			gotActive := h.GetActiveMessages(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotActive, h.SortMsgOpt); diff != "" {
 				t.Errorf("%s;mismatch found in %q; (-want,+got):\n%s", tc.desc, base.ActiveKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.scheduled {
-			gotScheduled := h.GetScheduledEntries(t, r.client, qname)
+			gotScheduled := h.GetScheduledEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotScheduled, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("%s;mismatch found in %q; (-want,+got):\n%s", tc.desc, base.ScheduledKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.retry {
-			gotRetry := h.GetRetryEntries(t, r.client, qname)
+			gotRetry := h.GetRetryEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotRetry, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("%s;mismatch found in %q; (-want,+got):\n%s", tc.desc, base.RetryKey(qname), diff)
 			}
 		}
 		for qname, want := range tc.archived {
-			gotArchived := h.GetArchivedEntries(t, r.client, qname)
+			gotArchived := h.GetArchivedEntries(t, r.origClient, qname)
 			if diff := cmp.Diff(want, gotArchived, h.SortZSetEntryOpt); diff != "" {
 				t.Errorf("%s;mismatch found in %q; (-want,+got):\n%s", tc.desc, base.ArchivedKey(qname), diff)
 			}
@@ -5228,7 +5228,7 @@ func TestListServers(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
+		h.FlushDB(t, r.origClient)
 
 		for _, info := range tc.data {
 			if err := r.WriteServerState(info, []*base.WorkerInfo{}, 5*time.Second); err != nil {
@@ -5304,7 +5304,7 @@ func TestListWorkers(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
+		h.FlushDB(t, r.origClient)
 
 		err := r.WriteServerState(&base.ServerInfo{}, tc.data, time.Minute)
 		if err != nil {
@@ -5408,7 +5408,7 @@ func TestSchedulerEnqueueEvents(t *testing.T) {
 
 loop:
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
+		h.FlushDB(t, r.origClient)
 
 		for _, e := range tc.events {
 			if err := r.RecordSchedulerEnqueueEvent(tc.entryID, e); err != nil {
@@ -5486,7 +5486,7 @@ func TestPause(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
+		h.FlushDB(t, r.origClient)
 
 		err := r.Pause(tc.qname)
 		if err != nil {
@@ -5511,7 +5511,7 @@ func TestPauseError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
+		h.FlushDB(t, r.origClient)
 		for _, qname := range tc.paused {
 			if err := r.Pause(qname); err != nil {
 				t.Fatalf("could not pause %q: %v", qname, err)
@@ -5536,7 +5536,7 @@ func TestUnpause(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
+		h.FlushDB(t, r.origClient)
 		for _, qname := range tc.paused {
 			if err := r.Pause(qname); err != nil {
 				t.Fatalf("could not pause %q: %v", qname, err)
@@ -5566,7 +5566,7 @@ func TestUnpauseError(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		h.FlushDB(t, r.client)
+		h.FlushDB(t, r.origClient)
 		for _, qname := range tc.paused {
 			if err := r.Pause(qname); err != nil {
 				t.Fatalf("could not pause %q: %v", qname, err)

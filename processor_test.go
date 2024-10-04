@@ -22,6 +22,7 @@ import (
 	"github.com/hibiken/asynq/internal/rdb"
 	h "github.com/hibiken/asynq/internal/testutil"
 	"github.com/hibiken/asynq/internal/timeutil"
+	"github.com/redis/rueidis/rueidiscompat"
 )
 
 var taskCmpOpts = []cmp.Option{
@@ -54,7 +55,7 @@ func fakeSyncer(syncCh <-chan *syncRequest, done <-chan struct{}) {
 }
 
 // Returns a processor instance configured for testing purpose.
-func newProcessorForTest(t *testing.T, r *rdb.RDB, h Handler) *processor {
+func newProcessorForTest(t *testing.T, r *rdb.RDBRueidis, h Handler) *processor {
 	starting := make(chan *workerInfo)
 	finished := make(chan *base.TaskMessage)
 	syncCh := make(chan *syncRequest)
@@ -85,6 +86,7 @@ func newProcessorForTest(t *testing.T, r *rdb.RDB, h Handler) *processor {
 
 func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 	r := setup(t)
+	cl := rueidiscompat.NewAdapter(r)
 	defer r.Close()
 	rdbClient := rdb.NewRDB(r)
 
@@ -139,7 +141,7 @@ func TestProcessorSuccessWithSingleQueue(t *testing.T) {
 			}
 		}
 		time.Sleep(2 * time.Second) // wait for two second to allow all pending tasks to be processed.
-		if l := r.LLen(context.Background(), base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
+		if l := cl.LLen(context.Background(), base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
 			t.Errorf("%q has %d tasks, want 0", base.ActiveKey(base.DefaultQueueName), l)
 		}
 		p.shutdown()
@@ -185,6 +187,7 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 		},
 	}
 
+	cl := rueidiscompat.NewAdapter(r)
 	for _, tc := range tests {
 		// Set up test case.
 		h.FlushDB(t, r)
@@ -211,7 +214,7 @@ func TestProcessorSuccessWithMultipleQueues(t *testing.T) {
 		time.Sleep(2 * time.Second)
 		// Make sure no messages are stuck in active list.
 		for _, qname := range tc.queues {
-			if l := r.LLen(context.Background(), base.ActiveKey(qname)).Val(); l != 0 {
+			if l := cl.LLen(context.Background(), base.ActiveKey(qname)).Val(); l != 0 {
 				t.Errorf("%q has %d tasks, want 0", base.ActiveKey(qname), l)
 			}
 		}
@@ -244,6 +247,7 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 		},
 	}
 
+	cl := rueidiscompat.NewAdapter(r)
 	for _, tc := range tests {
 		h.FlushDB(t, r)                                             // clean up db before each test case.
 		h.SeedPendingQueue(t, r, tc.pending, base.DefaultQueueName) // initialize default queue.
@@ -269,7 +273,7 @@ func TestProcessTasksWithLargeNumberInPayload(t *testing.T) {
 
 		p.start(&sync.WaitGroup{})
 		time.Sleep(2 * time.Second) // wait for two second to allow all pending tasks to be processed.
-		if l := r.LLen(context.Background(), base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
+		if l := cl.LLen(context.Background(), base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
 			t.Errorf("%q has %d tasks, want 0", base.ActiveKey(base.DefaultQueueName), l)
 		}
 		p.shutdown()
@@ -348,6 +352,7 @@ func TestProcessorRetry(t *testing.T) {
 		},
 	}
 
+	cl := rueidiscompat.NewAdapter(r)
 	for _, tc := range tests {
 		h.FlushDB(t, r)                                             // clean up db before each test case.
 		h.SeedPendingQueue(t, r, tc.pending, base.DefaultQueueName) // initialize default queue.
@@ -401,7 +406,7 @@ func TestProcessorRetry(t *testing.T) {
 			t.Errorf("%s: mismatch found in %q after running processor; (-want, +got)\n%s", tc.desc, base.ArchivedKey(base.DefaultQueueName), diff)
 		}
 
-		if l := r.LLen(context.Background(), base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
+		if l := cl.LLen(context.Background(), base.ActiveKey(base.DefaultQueueName)).Val(); l != 0 {
 			t.Errorf("%s: %q has %d tasks, want 0", base.ActiveKey(base.DefaultQueueName), tc.desc, l)
 		}
 
@@ -667,6 +672,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		},
 	}
 
+	cl := rueidiscompat.NewAdapter(r)
 	for _, tc := range tests {
 		h.FlushDB(t, r) // clean up db before each test case.
 		for qname, msgs := range tc.pending {
@@ -717,7 +723,7 @@ func TestProcessorWithStrictPriority(t *testing.T) {
 		time.Sleep(tc.wait)
 		// Make sure no tasks are stuck in active list.
 		for _, qname := range tc.queues {
-			if l := r.LLen(context.Background(), base.ActiveKey(qname)).Val(); l != 0 {
+			if l := cl.LLen(context.Background(), base.ActiveKey(qname)).Val(); l != 0 {
 				t.Errorf("%q has %d tasks, want 0", base.ActiveKey(qname), l)
 			}
 		}

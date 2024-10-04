@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
+	"github.com/redis/rueidis/rueidiscompat"
 	"github.com/spf13/cast"
 )
 
 // AllQueues returns a list of all queue names.
-func (r *RDB) AllQueues() ([]string, error) {
+func (r *RDBRueidis) AllQueues() ([]string, error) {
 	return r.client.SMembers(context.Background(), base.AllQueues).Result()
 }
 
@@ -92,7 +92,7 @@ type DailyStats struct {
 // --------
 // ARGV[1] -> task key prefix
 // ARGV[2] -> group key prefix
-var currentStatsCmd = redis.NewScript(`
+var currentStatsCmd = rueidiscompat.NewScript(`
 local res = {}
 local pendingTaskCount = redis.call("LLEN", KEYS[1])
 table.insert(res, KEYS[1])
@@ -137,7 +137,7 @@ table.insert(res, aggregating_count)
 return res`)
 
 // CurrentStats returns a current state of the queues.
-func (r *RDB) CurrentStats(qname string) (*Stats, error) {
+func (r *RDBRueidis) CurrentStats(qname string) (*Stats, error) {
 	var op errors.Op = "rdb.CurrentStats"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -252,7 +252,7 @@ func (r *RDB) CurrentStats(qname string) (*Stats, error) {
 // ARGV[2] -> task sample size per redis list/zset (e.g 20)
 // ARGV[3] -> group sample size
 // ARGV[4] -> asynq:{qname}:g: (group key prefix)
-var memoryUsageCmd = redis.NewScript(`
+var memoryUsageCmd = rueidiscompat.NewScript(`
 local sample_size = tonumber(ARGV[2])
 if sample_size <= 0 then
     return redis.error_reply("sample size must be a positive number")
@@ -315,7 +315,7 @@ end
 return memusg
 `)
 
-func (r *RDB) memoryUsage(qname string) (int64, error) {
+func (r *RDBRueidis) memoryUsage(qname string) (int64, error) {
 	var op errors.Op = "rdb.memoryUsage"
 	const (
 		taskSampleSize  = 20
@@ -348,7 +348,7 @@ func (r *RDB) memoryUsage(qname string) (int64, error) {
 	return usg, nil
 }
 
-var historicalStatsCmd = redis.NewScript(`
+var historicalStatsCmd = rueidiscompat.NewScript(`
 local res = {}
 for _, key in ipairs(KEYS) do
 	local n = redis.call("GET", key)
@@ -360,7 +360,7 @@ end
 return res`)
 
 // HistoricalStats returns a list of stats from the last n days for the given queue.
-func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
+func (r *RDBRueidis) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 	var op errors.Op = "rdb.HistoricalStats"
 	if n < 1 {
 		return nil, errors.E(op, errors.FailedPrecondition, "the number of days must be positive")
@@ -403,7 +403,7 @@ func (r *RDB) HistoricalStats(qname string, n int) ([]*DailyStats, error) {
 }
 
 // RedisInfo returns a map of redis info.
-func (r *RDB) RedisInfo() (map[string]string, error) {
+func (r *RDBRueidis) RedisInfo() (map[string]string, error) {
 	res, err := r.client.Info(context.Background()).Result()
 	if err != nil {
 		return nil, err
@@ -412,7 +412,7 @@ func (r *RDB) RedisInfo() (map[string]string, error) {
 }
 
 // RedisClusterInfo returns a map of redis cluster info.
-func (r *RDB) RedisClusterInfo() (map[string]string, error) {
+func (r *RDBRueidis) RedisClusterInfo() (map[string]string, error) {
 	res, err := r.client.ClusterInfo(context.Background()).Result()
 	if err != nil {
 		return nil, err
@@ -442,7 +442,7 @@ func reverse(x []*base.TaskInfo) {
 
 // checkQueueExists verifies whether the queue exists.
 // It returns QueueNotFoundError if queue doesn't exist.
-func (r *RDB) checkQueueExists(qname string) error {
+func (r *RDBRueidis) checkQueueExists(qname string) error {
 	exists, err := r.queueExists(qname)
 	if err != nil {
 		return errors.E(errors.Unknown, &errors.RedisCommandError{Command: "sismember", Err: err})
@@ -467,7 +467,7 @@ func (r *RDB) checkQueueExists(qname string) error {
 // result: result data associated with the task
 //
 // If the task key doesn't exist, it returns error with a message "NOT FOUND"
-var getTaskInfoCmd = redis.NewScript(`
+var getTaskInfoCmd = rueidiscompat.NewScript(`
 	if redis.call("EXISTS", KEYS[1]) == 0 then
 		return redis.error_reply("NOT FOUND")
 	end
@@ -482,7 +482,7 @@ var getTaskInfoCmd = redis.NewScript(`
 `)
 
 // GetTaskInfo returns a TaskInfo describing the task from the given queue.
-func (r *RDB) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
+func (r *RDBRueidis) GetTaskInfo(qname, id string) (*base.TaskInfo, error) {
 	var op errors.Op = "rdb.GetTaskInfo"
 	if err := r.checkQueueExists(qname); err != nil {
 		return nil, errors.E(op, errors.CanonicalCode(err), err)
@@ -564,7 +564,7 @@ type GroupStat struct {
 //
 // Time Complexity:
 // O(N) where N being the number of groups in the given queue.
-var groupStatsCmd = redis.NewScript(`
+var groupStatsCmd = rueidiscompat.NewScript(`
 local res = {}
 local group_names = redis.call("SMEMBERS", KEYS[1])
 for _, gname in ipairs(group_names) do
@@ -575,7 +575,7 @@ end
 return res
 `)
 
-func (r *RDB) GroupStats(qname string) ([]*GroupStat, error) {
+func (r *RDBRueidis) GroupStats(qname string) ([]*GroupStat, error) {
 	var op errors.Op = "RDB.GroupStats"
 	keys := []string{base.AllGroups(qname)}
 	argv := []interface{}{base.GroupKeyPrefix(qname)}
@@ -616,7 +616,7 @@ func (p Pagination) stop() int64 {
 }
 
 // ListPending returns pending tasks that are ready to be processed.
-func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDBRueidis) ListPending(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListPending"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -633,7 +633,7 @@ func (r *RDB) ListPending(qname string, pgn Pagination) ([]*base.TaskInfo, error
 }
 
 // ListActive returns all tasks that are currently being processed for the given queue.
-func (r *RDB) ListActive(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDBRueidis) ListActive(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListActive"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -653,7 +653,7 @@ func (r *RDB) ListActive(qname string, pgn Pagination) ([]*base.TaskInfo, error)
 // ARGV[1] -> start offset
 // ARGV[2] -> stop offset
 // ARGV[3] -> task key prefix
-var listMessagesCmd = redis.NewScript(`
+var listMessagesCmd = rueidiscompat.NewScript(`
 local ids = redis.call("LRange", KEYS[1], ARGV[1], ARGV[2])
 local data = {}
 for _, id in ipairs(ids) do
@@ -666,7 +666,7 @@ return data
 `)
 
 // listMessages returns a list of TaskInfo in Redis list with the given key.
-func (r *RDB) listMessages(qname string, state base.TaskState, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDBRueidis) listMessages(qname string, state base.TaskState, pgn Pagination) ([]*base.TaskInfo, error) {
 	var key string
 	switch state {
 	case base.TaskStateActive:
@@ -717,7 +717,7 @@ func (r *RDB) listMessages(qname string, state base.TaskState, pgn Pagination) (
 
 // ListScheduled returns all tasks from the given queue that are scheduled
 // to be processed in the future.
-func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDBRueidis) ListScheduled(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListScheduled"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -735,7 +735,7 @@ func (r *RDB) ListScheduled(qname string, pgn Pagination) ([]*base.TaskInfo, err
 
 // ListRetry returns all tasks from the given queue that have failed before
 // and willl be retried in the future.
-func (r *RDB) ListRetry(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDBRueidis) ListRetry(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListRetry"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -752,7 +752,7 @@ func (r *RDB) ListRetry(qname string, pgn Pagination) ([]*base.TaskInfo, error) 
 }
 
 // ListArchived returns all tasks from the given queue that have exhausted its retry limit.
-func (r *RDB) ListArchived(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDBRueidis) ListArchived(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListArchived"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -769,7 +769,7 @@ func (r *RDB) ListArchived(qname string, pgn Pagination) ([]*base.TaskInfo, erro
 }
 
 // ListCompleted returns all tasks from the given queue that have completed successfully.
-func (r *RDB) ListCompleted(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDBRueidis) ListCompleted(qname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListCompleted"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -786,7 +786,7 @@ func (r *RDB) ListCompleted(qname string, pgn Pagination) ([]*base.TaskInfo, err
 }
 
 // ListAggregating returns all tasks from the given group.
-func (r *RDB) ListAggregating(qname, gname string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDBRueidis) ListAggregating(qname, gname string, pgn Pagination) ([]*base.TaskInfo, error) {
 	var op errors.Op = "rdb.ListAggregating"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -803,7 +803,7 @@ func (r *RDB) ListAggregating(qname, gname string, pgn Pagination) ([]*base.Task
 }
 
 // Reports whether a queue with the given name exists.
-func (r *RDB) queueExists(qname string) (bool, error) {
+func (r *RDBRueidis) queueExists(qname string) (bool, error) {
 	return r.client.SIsMember(context.Background(), base.AllQueues, qname).Result()
 }
 
@@ -814,7 +814,7 @@ func (r *RDB) queueExists(qname string) (bool, error) {
 //
 // Returns an array populated with
 // [msg1, score1, result1, msg2, score2, result2, ..., msgN, scoreN, resultN]
-var listZSetEntriesCmd = redis.NewScript(`
+var listZSetEntriesCmd = rueidiscompat.NewScript(`
 local data = {}
 local id_score_pairs = redis.call("ZRANGE", KEYS[1], ARGV[1], ARGV[2], "WITHSCORES")
 for i = 1, table.getn(id_score_pairs), 2 do
@@ -831,7 +831,7 @@ return data
 
 // listZSetEntries returns a list of message and score pairs in Redis sorted-set
 // with the given key.
-func (r *RDB) listZSetEntries(qname string, state base.TaskState, key string, pgn Pagination) ([]*base.TaskInfo, error) {
+func (r *RDBRueidis) listZSetEntries(qname string, state base.TaskState, key string, pgn Pagination) ([]*base.TaskInfo, error) {
 	res, err := listZSetEntriesCmd.Run(context.Background(), r.client, []string{key},
 		pgn.start(), pgn.stop(), base.TaskKeyPrefix(qname)).Result()
 	if err != nil {
@@ -880,7 +880,7 @@ func (r *RDB) listZSetEntries(qname string, state base.TaskState, key string, pg
 // RunAllScheduledTasks enqueues all scheduled tasks from the given queue
 // and returns the number of tasks enqueued.
 // If a queue with the given name doesn't exist, it returns QueueNotFoundError.
-func (r *RDB) RunAllScheduledTasks(qname string) (int64, error) {
+func (r *RDBRueidis) RunAllScheduledTasks(qname string) (int64, error) {
 	var op errors.Op = "rdb.RunAllScheduledTasks"
 	n, err := r.runAll(base.ScheduledKey(qname), qname)
 	if errors.IsQueueNotFound(err) {
@@ -895,7 +895,7 @@ func (r *RDB) RunAllScheduledTasks(qname string) (int64, error) {
 // RunAllRetryTasks enqueues all retry tasks from the given queue
 // and returns the number of tasks enqueued.
 // If a queue with the given name doesn't exist, it returns QueueNotFoundError.
-func (r *RDB) RunAllRetryTasks(qname string) (int64, error) {
+func (r *RDBRueidis) RunAllRetryTasks(qname string) (int64, error) {
 	var op errors.Op = "rdb.RunAllRetryTasks"
 	n, err := r.runAll(base.RetryKey(qname), qname)
 	if errors.IsQueueNotFound(err) {
@@ -910,7 +910,7 @@ func (r *RDB) RunAllRetryTasks(qname string) (int64, error) {
 // RunAllArchivedTasks enqueues all archived tasks from the given queue
 // and returns the number of tasks enqueued.
 // If a queue with the given name doesn't exist, it returns QueueNotFoundError.
-func (r *RDB) RunAllArchivedTasks(qname string) (int64, error) {
+func (r *RDBRueidis) RunAllArchivedTasks(qname string) (int64, error) {
 	var op errors.Op = "rdb.RunAllArchivedTasks"
 	n, err := r.runAll(base.ArchivedKey(qname), qname)
 	if errors.IsQueueNotFound(err) {
@@ -934,7 +934,7 @@ func (r *RDB) RunAllArchivedTasks(qname string) (int64, error) {
 //
 // Output:
 // integer: number of tasks scheduled to run
-var runAllAggregatingCmd = redis.NewScript(`
+var runAllAggregatingCmd = rueidiscompat.NewScript(`
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("LPUSH", KEYS[2], id)
@@ -948,7 +948,7 @@ return table.getn(ids)
 // RunAllAggregatingTasks schedules all tasks from the given queue to run
 // and returns the number of tasks scheduled to run.
 // If a queue with the given name doesn't exist, it returns QueueNotFoundError.
-func (r *RDB) RunAllAggregatingTasks(qname, gname string) (int64, error) {
+func (r *RDBRueidis) RunAllAggregatingTasks(qname, gname string) (int64, error) {
 	var op errors.Op = "rdb.RunAllAggregatingTasks"
 	if err := r.checkQueueExists(qname); err != nil {
 		return 0, errors.E(op, errors.CanonicalCode(err), err)
@@ -991,7 +991,7 @@ func (r *RDB) RunAllAggregatingTasks(qname, gname string) (int64, error) {
 // Returns -1 if task is in active state.
 // Returns -2 if task is in pending state.
 // Returns error reply if unexpected error occurs.
-var runTaskCmd = redis.NewScript(`
+var runTaskCmd = rueidiscompat.NewScript(`
 if redis.call("EXISTS", KEYS[1]) == 0 then
 	return 0
 end
@@ -1025,7 +1025,7 @@ return 1
 // If a queue with the given name doesn't exist, it returns QueueNotFoundError.
 // If a task with the given id doesn't exist in the queue, it returns TaskNotFoundError
 // If a task is in active or pending state it returns non-nil error with Code FailedPrecondition.
-func (r *RDB) RunTask(qname, id string) error {
+func (r *RDBRueidis) RunTask(qname, id string) error {
 	var op errors.Op = "rdb.RunTask"
 	if err := r.checkQueueExists(qname); err != nil {
 		return errors.E(op, errors.CanonicalCode(err), err)
@@ -1073,7 +1073,7 @@ func (r *RDB) RunTask(qname, id string) error {
 //
 // Output:
 // integer: number of tasks updated to pending state.
-var runAllCmd = redis.NewScript(`
+var runAllCmd = rueidiscompat.NewScript(`
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("LPUSH", KEYS[2], id)
@@ -1082,7 +1082,7 @@ end
 redis.call("DEL", KEYS[1])
 return table.getn(ids)`)
 
-func (r *RDB) runAll(zset, qname string) (int64, error) {
+func (r *RDBRueidis) runAll(zset, qname string) (int64, error) {
 	if err := r.checkQueueExists(qname); err != nil {
 		return 0, err
 	}
@@ -1110,7 +1110,7 @@ func (r *RDB) runAll(zset, qname string) (int64, error) {
 // ArchiveAllRetryTasks archives all retry tasks from the given queue and
 // returns the number of tasks that were moved.
 // If a queue with the given name doesn't exist, it returns QueueNotFoundError.
-func (r *RDB) ArchiveAllRetryTasks(qname string) (int64, error) {
+func (r *RDBRueidis) ArchiveAllRetryTasks(qname string) (int64, error) {
 	var op errors.Op = "rdb.ArchiveAllRetryTasks"
 	n, err := r.archiveAll(base.RetryKey(qname), base.ArchivedKey(qname), qname)
 	if errors.IsQueueNotFound(err) {
@@ -1125,7 +1125,7 @@ func (r *RDB) ArchiveAllRetryTasks(qname string) (int64, error) {
 // ArchiveAllScheduledTasks archives all scheduled tasks from the given queue and
 // returns the number of tasks that were moved.
 // If a queue with the given name doesn't exist, it returns QueueNotFoundError.
-func (r *RDB) ArchiveAllScheduledTasks(qname string) (int64, error) {
+func (r *RDBRueidis) ArchiveAllScheduledTasks(qname string) (int64, error) {
 	var op errors.Op = "rdb.ArchiveAllScheduledTasks"
 	n, err := r.archiveAll(base.ScheduledKey(qname), base.ArchivedKey(qname), qname)
 	if errors.IsQueueNotFound(err) {
@@ -1152,7 +1152,7 @@ func (r *RDB) ArchiveAllScheduledTasks(qname string) (int64, error) {
 //
 // Output:
 // integer: Number of tasks archived
-var archiveAllAggregatingCmd = redis.NewScript(`
+var archiveAllAggregatingCmd = rueidiscompat.NewScript(`
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
@@ -1168,7 +1168,7 @@ return table.getn(ids)
 // ArchiveAllAggregatingTasks archives all aggregating tasks from the given group
 // and returns the number of tasks archived.
 // If a queue with the given name doesn't exist, it returns QueueNotFoundError.
-func (r *RDB) ArchiveAllAggregatingTasks(qname, gname string) (int64, error) {
+func (r *RDBRueidis) ArchiveAllAggregatingTasks(qname, gname string) (int64, error) {
 	var op errors.Op = "rdb.ArchiveAllAggregatingTasks"
 	if err := r.checkQueueExists(qname); err != nil {
 		return 0, errors.E(op, errors.CanonicalCode(err), err)
@@ -1211,7 +1211,7 @@ func (r *RDB) ArchiveAllAggregatingTasks(qname, gname string) (int64, error) {
 //
 // Output:
 // integer: Number of tasks archived
-var archiveAllPendingCmd = redis.NewScript(`
+var archiveAllPendingCmd = rueidiscompat.NewScript(`
 local ids = redis.call("LRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
@@ -1225,7 +1225,7 @@ return table.getn(ids)`)
 // ArchiveAllPendingTasks archives all pending tasks from the given queue and
 // returns the number of tasks moved.
 // If a queue with the given name doesn't exist, it returns QueueNotFoundError.
-func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
+func (r *RDBRueidis) ArchiveAllPendingTasks(qname string) (int64, error) {
 	var op errors.Op = "rdb.ArchiveAllPendingTasks"
 	if err := r.checkQueueExists(qname); err != nil {
 		return 0, errors.E(op, errors.CanonicalCode(err), err)
@@ -1273,7 +1273,7 @@ func (r *RDB) ArchiveAllPendingTasks(qname string) (int64, error) {
 // Returns -1 if task is already archived.
 // Returns -2 if task is in active state.
 // Returns error reply if unexpected error occurs.
-var archiveTaskCmd = redis.NewScript(`
+var archiveTaskCmd = rueidiscompat.NewScript(`
 if redis.call("EXISTS", KEYS[1]) == 0 then
 	return 0
 end
@@ -1314,7 +1314,7 @@ return 1
 // If a task with the given id doesn't exist in the queue, it returns TaskNotFoundError
 // If a task is already archived, it returns TaskAlreadyArchivedError.
 // If a task is in active state it returns non-nil error with FailedPrecondition code.
-func (r *RDB) ArchiveTask(qname, id string) error {
+func (r *RDBRueidis) ArchiveTask(qname, id string) error {
 	var op errors.Op = "rdb.ArchiveTask"
 	if err := r.checkQueueExists(qname); err != nil {
 		return errors.E(op, errors.CanonicalCode(err), err)
@@ -1371,7 +1371,7 @@ func (r *RDB) ArchiveTask(qname, id string) error {
 //
 // Output:
 // integer: number of tasks archived
-var archiveAllCmd = redis.NewScript(`
+var archiveAllCmd = rueidiscompat.NewScript(`
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("ZADD", KEYS[2], ARGV[1], id)
@@ -1382,7 +1382,7 @@ redis.call("ZREMRANGEBYRANK", KEYS[2], 0, -ARGV[3])
 redis.call("DEL", KEYS[1])
 return table.getn(ids)`)
 
-func (r *RDB) archiveAll(src, dst, qname string) (int64, error) {
+func (r *RDBRueidis) archiveAll(src, dst, qname string) (int64, error) {
 	if err := r.checkQueueExists(qname); err != nil {
 		return 0, err
 	}
@@ -1425,7 +1425,7 @@ func (r *RDB) archiveAll(src, dst, qname string) (int64, error) {
 // Returns 1 if task is successfully deleted.
 // Returns 0 if task is not found.
 // Returns -1 if task is in active state.
-var deleteTaskCmd = redis.NewScript(`
+var deleteTaskCmd = rueidiscompat.NewScript(`
 if redis.call("EXISTS", KEYS[1]) == 0 then
 	return 0
 end
@@ -1462,7 +1462,7 @@ return redis.call("DEL", KEYS[1])
 // If a queue with the given name doesn't exist, it returns QueueNotFoundError.
 // If a task with the given id doesn't exist in the queue, it returns TaskNotFoundError
 // If a task is in active state it returns non-nil error with Code FailedPrecondition.
-func (r *RDB) DeleteTask(qname, id string) error {
+func (r *RDBRueidis) DeleteTask(qname, id string) error {
 	var op errors.Op = "rdb.DeleteTask"
 	if err := r.checkQueueExists(qname); err != nil {
 		return errors.E(op, errors.CanonicalCode(err), err)
@@ -1498,7 +1498,7 @@ func (r *RDB) DeleteTask(qname, id string) error {
 
 // DeleteAllArchivedTasks deletes all archived tasks from the given queue
 // and returns the number of tasks deleted.
-func (r *RDB) DeleteAllArchivedTasks(qname string) (int64, error) {
+func (r *RDBRueidis) DeleteAllArchivedTasks(qname string) (int64, error) {
 	var op errors.Op = "rdb.DeleteAllArchivedTasks"
 	n, err := r.deleteAll(base.ArchivedKey(qname), qname)
 	if errors.IsQueueNotFound(err) {
@@ -1512,7 +1512,7 @@ func (r *RDB) DeleteAllArchivedTasks(qname string) (int64, error) {
 
 // DeleteAllRetryTasks deletes all retry tasks from the given queue
 // and returns the number of tasks deleted.
-func (r *RDB) DeleteAllRetryTasks(qname string) (int64, error) {
+func (r *RDBRueidis) DeleteAllRetryTasks(qname string) (int64, error) {
 	var op errors.Op = "rdb.DeleteAllRetryTasks"
 	n, err := r.deleteAll(base.RetryKey(qname), qname)
 	if errors.IsQueueNotFound(err) {
@@ -1526,7 +1526,7 @@ func (r *RDB) DeleteAllRetryTasks(qname string) (int64, error) {
 
 // DeleteAllScheduledTasks deletes all scheduled tasks from the given queue
 // and returns the number of tasks deleted.
-func (r *RDB) DeleteAllScheduledTasks(qname string) (int64, error) {
+func (r *RDBRueidis) DeleteAllScheduledTasks(qname string) (int64, error) {
 	var op errors.Op = "rdb.DeleteAllScheduledTasks"
 	n, err := r.deleteAll(base.ScheduledKey(qname), qname)
 	if errors.IsQueueNotFound(err) {
@@ -1540,7 +1540,7 @@ func (r *RDB) DeleteAllScheduledTasks(qname string) (int64, error) {
 
 // DeleteAllCompletedTasks deletes all completed tasks from the given queue
 // and returns the number of tasks deleted.
-func (r *RDB) DeleteAllCompletedTasks(qname string) (int64, error) {
+func (r *RDBRueidis) DeleteAllCompletedTasks(qname string) (int64, error) {
 	var op errors.Op = "rdb.DeleteAllCompletedTasks"
 	n, err := r.deleteAll(base.CompletedKey(qname), qname)
 	if errors.IsQueueNotFound(err) {
@@ -1561,7 +1561,7 @@ func (r *RDB) DeleteAllCompletedTasks(qname string) (int64, error) {
 //
 // Output:
 // integer: number of tasks deleted
-var deleteAllCmd = redis.NewScript(`
+var deleteAllCmd = rueidiscompat.NewScript(`
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	local task_key = ARGV[1] .. id
@@ -1574,7 +1574,7 @@ end
 redis.call("DEL", KEYS[1])
 return table.getn(ids)`)
 
-func (r *RDB) deleteAll(key, qname string) (int64, error) {
+func (r *RDBRueidis) deleteAll(key, qname string) (int64, error) {
 	if err := r.checkQueueExists(qname); err != nil {
 		return 0, err
 	}
@@ -1601,7 +1601,7 @@ func (r *RDB) deleteAll(key, qname string) (int64, error) {
 // -------
 // ARGV[1] -> task key prefix
 // ARGV[2] -> group name
-var deleteAllAggregatingCmd = redis.NewScript(`
+var deleteAllAggregatingCmd = rueidiscompat.NewScript(`
 local ids = redis.call("ZRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("DEL", ARGV[1] .. id)
@@ -1613,7 +1613,7 @@ return table.getn(ids)
 
 // DeleteAllAggregatingTasks deletes all aggregating tasks from the given group
 // and returns the number of tasks deleted.
-func (r *RDB) DeleteAllAggregatingTasks(qname, gname string) (int64, error) {
+func (r *RDBRueidis) DeleteAllAggregatingTasks(qname, gname string) (int64, error) {
 	var op errors.Op = "rdb.DeleteAllAggregatingTasks"
 	if err := r.checkQueueExists(qname); err != nil {
 		return 0, errors.E(op, errors.CanonicalCode(err), err)
@@ -1646,7 +1646,7 @@ func (r *RDB) DeleteAllAggregatingTasks(qname, gname string) (int64, error) {
 //
 // Output:
 // integer: number of tasks deleted
-var deleteAllPendingCmd = redis.NewScript(`
+var deleteAllPendingCmd = rueidiscompat.NewScript(`
 local ids = redis.call("LRANGE", KEYS[1], 0, -1)
 for _, id in ipairs(ids) do
 	redis.call("DEL", ARGV[1] .. id)
@@ -1656,7 +1656,7 @@ return table.getn(ids)`)
 
 // DeleteAllPendingTasks deletes all pending tasks from the given queue
 // and returns the number of tasks deleted.
-func (r *RDB) DeleteAllPendingTasks(qname string) (int64, error) {
+func (r *RDBRueidis) DeleteAllPendingTasks(qname string) (int64, error) {
 	var op errors.Op = "rdb.DeleteAllPendingTasks"
 	if err := r.checkQueueExists(qname); err != nil {
 		return 0, errors.E(op, errors.CanonicalCode(err), err)
@@ -1696,7 +1696,7 @@ func (r *RDB) DeleteAllPendingTasks(qname string) (int64, error) {
 // Numeric code to indicate the status.
 // Returns 1 if successfully removed.
 // Returns -2 if the queue has active tasks.
-var removeQueueForceCmd = redis.NewScript(`
+var removeQueueForceCmd = rueidiscompat.NewScript(`
 local active = redis.call("LLEN", KEYS[2])
 if active > 0 then
     return -2
@@ -1756,7 +1756,7 @@ return 1`)
 // Numeric code to indicate the status
 // Returns 1 if successfully removed.
 // Returns -1 if queue is not empty
-var removeQueueCmd = redis.NewScript(`
+var removeQueueCmd = rueidiscompat.NewScript(`
 local ids = {}
 for _, id in ipairs(redis.call("LRANGE", KEYS[1], 0, -1)) do
 	table.insert(ids, id)
@@ -1796,7 +1796,7 @@ return 1`)
 // as long as no tasks are active for the queue.
 // If force is set to false, it will only remove the queue if
 // the queue is empty.
-func (r *RDB) RemoveQueue(qname string, force bool) error {
+func (r *RDBRueidis) RemoveQueue(qname string, force bool) error {
 	var op errors.Op = "rdb.RemoveQueue"
 	exists, err := r.queueExists(qname)
 	if err != nil {
@@ -1805,7 +1805,7 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 	if !exists {
 		return errors.E(op, errors.NotFound, &errors.QueueNotFoundError{Queue: qname})
 	}
-	var script *redis.Script
+	var script *rueidiscompat.Script
 	if force {
 		script = removeQueueForceCmd
 	} else {
@@ -1843,14 +1843,14 @@ func (r *RDB) RemoveQueue(qname string, force bool) error {
 }
 
 // Note: Script also removes stale keys.
-var listServerKeysCmd = redis.NewScript(`
+var listServerKeysCmd = rueidiscompat.NewScript(`
 local now = tonumber(ARGV[1])
 local keys = redis.call("ZRANGEBYSCORE", KEYS[1], now, "+inf")
 redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now-1)
 return keys`)
 
 // ListServers returns the list of server info.
-func (r *RDB) ListServers() ([]*base.ServerInfo, error) {
+func (r *RDBRueidis) ListServers() ([]*base.ServerInfo, error) {
 	now := r.clock.Now()
 	res, err := listServerKeysCmd.Run(context.Background(), r.client, []string{base.AllServers}, now.Unix()).Result()
 	if err != nil {
@@ -1876,14 +1876,14 @@ func (r *RDB) ListServers() ([]*base.ServerInfo, error) {
 }
 
 // Note: Script also removes stale keys.
-var listWorkersCmd = redis.NewScript(`
+var listWorkersCmd = rueidiscompat.NewScript(`
 local now = tonumber(ARGV[1])
 local keys = redis.call("ZRANGEBYSCORE", KEYS[1], now, "+inf")
 redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now-1)
 return keys`)
 
 // ListWorkers returns the list of worker stats.
-func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
+func (r *RDBRueidis) ListWorkers() ([]*base.WorkerInfo, error) {
 	var op errors.Op = "rdb.ListWorkers"
 	now := r.clock.Now()
 	res, err := listWorkersCmd.Run(context.Background(), r.client, []string{base.AllWorkers}, now.Unix()).Result()
@@ -1912,14 +1912,14 @@ func (r *RDB) ListWorkers() ([]*base.WorkerInfo, error) {
 }
 
 // Note: Script also removes stale keys.
-var listSchedulerKeysCmd = redis.NewScript(`
+var listSchedulerKeysCmd = rueidiscompat.NewScript(`
 local now = tonumber(ARGV[1])
 local keys = redis.call("ZRANGEBYSCORE", KEYS[1], now, "+inf")
 redis.call("ZREMRANGEBYSCORE", KEYS[1], "-inf", now-1)
 return keys`)
 
 // ListSchedulerEntries returns the list of scheduler entries.
-func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
+func (r *RDBRueidis) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
 	now := r.clock.Now()
 	res, err := listSchedulerKeysCmd.Run(context.Background(), r.client, []string{base.AllSchedulers}, now.Unix()).Result()
 	if err != nil {
@@ -1947,7 +1947,7 @@ func (r *RDB) ListSchedulerEntries() ([]*base.SchedulerEntry, error) {
 }
 
 // ListSchedulerEnqueueEvents returns the list of scheduler enqueue events.
-func (r *RDB) ListSchedulerEnqueueEvents(entryID string, pgn Pagination) ([]*base.SchedulerEnqueueEvent, error) {
+func (r *RDBRueidis) ListSchedulerEnqueueEvents(entryID string, pgn Pagination) ([]*base.SchedulerEnqueueEvent, error) {
 	key := base.SchedulerHistoryKey(entryID)
 	zs, err := r.client.ZRevRangeWithScores(context.Background(), key, pgn.start(), pgn.stop()).Result()
 	if err != nil {
@@ -1969,7 +1969,7 @@ func (r *RDB) ListSchedulerEnqueueEvents(entryID string, pgn Pagination) ([]*bas
 }
 
 // Pause pauses processing of tasks from the given queue.
-func (r *RDB) Pause(qname string) error {
+func (r *RDBRueidis) Pause(qname string) error {
 	key := base.PausedKey(qname)
 	ok, err := r.client.SetNX(context.Background(), key, r.clock.Now().Unix(), 0).Result()
 	if err != nil {
@@ -1982,7 +1982,7 @@ func (r *RDB) Pause(qname string) error {
 }
 
 // Unpause resumes processing of tasks from the given queue.
-func (r *RDB) Unpause(qname string) error {
+func (r *RDBRueidis) Unpause(qname string) error {
 	key := base.PausedKey(qname)
 	deleted, err := r.client.Del(context.Background(), key).Result()
 	if err != nil {
@@ -1995,13 +1995,13 @@ func (r *RDB) Unpause(qname string) error {
 }
 
 // ClusterKeySlot returns an integer identifying the hash slot the given queue hashes to.
-func (r *RDB) ClusterKeySlot(qname string) (int64, error) {
+func (r *RDBRueidis) ClusterKeySlot(qname string) (int64, error) {
 	key := base.PendingKey(qname)
 	return r.client.ClusterKeySlot(context.Background(), key).Result()
 }
 
 // ClusterNodes returns a list of nodes the given queue belongs to.
-func (r *RDB) ClusterNodes(qname string) ([]redis.ClusterNode, error) {
+func (r *RDBRueidis) ClusterNodes(qname string) ([]rueidiscompat.ClusterNode, error) {
 	keyslot, err := r.ClusterKeySlot(qname)
 	if err != nil {
 		return nil, err

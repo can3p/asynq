@@ -11,11 +11,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/hibiken/asynq/internal/log"
 	h "github.com/hibiken/asynq/internal/testutil"
+	"github.com/redis/rueidis"
 )
 
 //============================================================================
@@ -46,22 +46,28 @@ func init() {
 	testLogger.SetLevel(toInternalLogLevel(testLogLevel))
 }
 
-func setup(tb testing.TB) (r redis.UniversalClient) {
+func setup(tb testing.TB) (r rueidis.Client) {
 	tb.Helper()
+	var err error
 	if useRedisCluster {
 		addrs := strings.Split(redisClusterAddrs, ",")
 		if len(addrs) == 0 {
 			tb.Fatal("No redis cluster addresses provided. Please set addresses using --redis_cluster_addrs flag.")
 		}
-		r = redis.NewClusterClient(&redis.ClusterOptions{
-			Addrs: addrs,
+		r, err = rueidis.NewClient(rueidis.ClientOption{
+			InitAddress: addrs,
 		})
 	} else {
-		r = redis.NewClient(&redis.Options{
-			Addr: redisAddr,
-			DB:   redisDB,
+		r, err = rueidis.NewClient(rueidis.ClientOption{
+			InitAddress: []string{redisAddr},
+			SelectDB:    redisDB,
 		})
 	}
+
+	if err != nil {
+		panic(err)
+	}
+
 	// Start each test with a clean slate.
 	h.FlushDB(tb, r)
 	return r

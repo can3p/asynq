@@ -22,7 +22,7 @@ func BenchmarkEnqueue(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		testutil.FlushDB(b, r.client)
+		testutil.FlushDB(b, r.origClient)
 		b.StartTimer()
 
 		if err := r.Enqueue(ctx, msg); err != nil {
@@ -45,7 +45,7 @@ func BenchmarkEnqueueUnique(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		testutil.FlushDB(b, r.client)
+		testutil.FlushDB(b, r.origClient)
 		b.StartTimer()
 
 		if err := r.EnqueueUnique(ctx, msg, uniqueTTL); err != nil {
@@ -63,7 +63,7 @@ func BenchmarkSchedule(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		testutil.FlushDB(b, r.client)
+		testutil.FlushDB(b, r.origClient)
 		b.StartTimer()
 
 		if err := r.Schedule(ctx, msg, processAt); err != nil {
@@ -87,7 +87,7 @@ func BenchmarkScheduleUnique(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		testutil.FlushDB(b, r.client)
+		testutil.FlushDB(b, r.origClient)
 		b.StartTimer()
 
 		if err := r.ScheduleUnique(ctx, msg, processAt, uniqueTTL); err != nil {
@@ -103,7 +103,7 @@ func BenchmarkDequeueSingleQueue(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		testutil.FlushDB(b, r.client)
+		testutil.FlushDB(b, r.origClient)
 		for i := 0; i < 10; i++ {
 			m := testutil.NewTaskMessageWithQueue(
 				fmt.Sprintf("task%d", i), nil, base.DefaultQueueName)
@@ -127,7 +127,7 @@ func BenchmarkDequeueMultipleQueues(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		testutil.FlushDB(b, r.client)
+		testutil.FlushDB(b, r.origClient)
 		for i := 0; i < 10; i++ {
 			for _, qname := range qnames {
 				m := testutil.NewTaskMessageWithQueue(
@@ -161,9 +161,9 @@ func BenchmarkDone(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		testutil.FlushDB(b, r.client)
-		testutil.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
-		testutil.SeedLease(b, r.client, zs, base.DefaultQueueName)
+		testutil.FlushDB(b, r.origClient)
+		testutil.SeedActiveQueue(b, r.origClient, msgs, base.DefaultQueueName)
+		testutil.SeedLease(b, r.origClient, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.Done(ctx, msgs[0]); err != nil {
@@ -188,9 +188,9 @@ func BenchmarkRetry(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		testutil.FlushDB(b, r.client)
-		testutil.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
-		testutil.SeedLease(b, r.client, zs, base.DefaultQueueName)
+		testutil.FlushDB(b, r.origClient)
+		testutil.SeedActiveQueue(b, r.origClient, msgs, base.DefaultQueueName)
+		testutil.SeedLease(b, r.origClient, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.Retry(ctx, msgs[0], time.Now().Add(1*time.Minute), "error", true /*isFailure*/); err != nil {
@@ -215,9 +215,9 @@ func BenchmarkArchive(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		testutil.FlushDB(b, r.client)
-		testutil.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
-		testutil.SeedLease(b, r.client, zs, base.DefaultQueueName)
+		testutil.FlushDB(b, r.origClient)
+		testutil.SeedActiveQueue(b, r.origClient, msgs, base.DefaultQueueName)
+		testutil.SeedLease(b, r.origClient, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.Archive(ctx, msgs[0], "error"); err != nil {
@@ -242,9 +242,9 @@ func BenchmarkRequeue(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		testutil.FlushDB(b, r.client)
-		testutil.SeedActiveQueue(b, r.client, msgs, base.DefaultQueueName)
-		testutil.SeedLease(b, r.client, zs, base.DefaultQueueName)
+		testutil.FlushDB(b, r.origClient)
+		testutil.SeedActiveQueue(b, r.origClient, msgs, base.DefaultQueueName)
+		testutil.SeedLease(b, r.origClient, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.Requeue(ctx, msgs[0]); err != nil {
@@ -266,8 +266,8 @@ func BenchmarkCheckAndEnqueue(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		testutil.FlushDB(b, r.client)
-		testutil.SeedScheduledQueue(b, r.client, zs, base.DefaultQueueName)
+		testutil.FlushDB(b, r.origClient)
+		testutil.SeedScheduledQueue(b, r.origClient, zs, base.DefaultQueueName)
 		b.StartTimer()
 
 		if err := r.ForwardIfReady(base.DefaultQueueName); err != nil {

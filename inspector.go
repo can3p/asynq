@@ -10,21 +10,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/rueidis"
 )
 
 // Inspector is a client interface to inspect and mutate the state of
 // queues and tasks.
 type Inspector struct {
-	rdb *rdb.RDB
+	rdb *rdb.RDBRueidis
 }
 
 // New returns a new instance of Inspector.
 func NewInspector(r RedisConnOpt) *Inspector {
-	c, ok := r.MakeRedisClient().(redis.UniversalClient)
+	c, ok := r.MakeRedisClient().(rueidis.Client)
 	if !ok {
 		panic(fmt.Sprintf("inspeq: unsupported RedisConnOpt type %T", r))
 	}

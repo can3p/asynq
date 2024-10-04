@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/redis/go-redis/v9"
 	"github.com/google/uuid"
 	"github.com/hibiken/asynq/internal/base"
 	"github.com/hibiken/asynq/internal/errors"
 	"github.com/hibiken/asynq/internal/rdb"
+	"github.com/redis/rueidis"
 )
 
 // A Client is responsible for scheduling tasks.
@@ -29,7 +29,7 @@ type Client struct {
 
 // NewClient returns a new Client instance given a redis connection option.
 func NewClient(r RedisConnOpt) *Client {
-	c, ok := r.MakeRedisClient().(redis.UniversalClient)
+	c, ok := r.MakeRedisClient().(rueidis.Client)
 	if !ok {
 		panic(fmt.Sprintf("asynq: unsupported RedisConnOpt type %T", r))
 	}
@@ -150,9 +150,9 @@ func (t deadlineOption) Value() interface{} { return time.Time(t) }
 // TTL duration must be greater than or equal to 1 second.
 //
 // Uniqueness of a task is based on the following properties:
-//     - Task Type
-//     - Task Payload
-//     - Queue Name
+//   - Task Type
+//   - Task Payload
+//   - Queue Name
 func Unique(ttl time.Duration) Option {
 	return uniqueOption(ttl)
 }

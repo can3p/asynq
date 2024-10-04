@@ -14,6 +14,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/hibiken/asynq/internal/base"
 	h "github.com/hibiken/asynq/internal/testutil"
+	"github.com/redis/rueidis/rueidiscompat"
 )
 
 func TestClientEnqueueWithProcessAtOption(t *testing.T) {
@@ -1044,6 +1045,7 @@ func TestClientWithDefaultOptions(t *testing.T) {
 
 func TestClientEnqueueUnique(t *testing.T) {
 	r := setup(t)
+	cl := rueidiscompat.NewAdapter(r)
 	c := NewClient(getRedisConnOpt(t))
 	defer c.Close()
 
@@ -1066,7 +1068,7 @@ func TestClientEnqueueUnique(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(context.Background(), base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
+		gotTTL := cl.TTL(context.Background(), base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
 		if !cmp.Equal(tc.ttl.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, tc.ttl)
 			continue
@@ -1087,6 +1089,7 @@ func TestClientEnqueueUnique(t *testing.T) {
 
 func TestClientEnqueueUniqueWithProcessInOption(t *testing.T) {
 	r := setup(t)
+	cl := rueidiscompat.NewAdapter(r)
 	c := NewClient(getRedisConnOpt(t))
 	defer c.Close()
 
@@ -1111,7 +1114,7 @@ func TestClientEnqueueUniqueWithProcessInOption(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(context.Background(), base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
+		gotTTL := cl.TTL(context.Background(), base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
 		wantTTL := time.Duration(tc.ttl.Seconds()+tc.d.Seconds()) * time.Second
 		if !cmp.Equal(wantTTL.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, wantTTL)
@@ -1133,6 +1136,7 @@ func TestClientEnqueueUniqueWithProcessInOption(t *testing.T) {
 
 func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 	r := setup(t)
+	cl := rueidiscompat.NewAdapter(r)
 	c := NewClient(getRedisConnOpt(t))
 	defer c.Close()
 
@@ -1157,7 +1161,7 @@ func TestClientEnqueueUniqueWithProcessAtOption(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		gotTTL := r.TTL(context.Background(), base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
+		gotTTL := cl.TTL(context.Background(), base.UniqueKey(base.DefaultQueueName, tc.task.Type(), tc.task.Payload())).Val()
 		wantTTL := tc.at.Add(tc.ttl).Sub(time.Now())
 		if !cmp.Equal(wantTTL.Seconds(), gotTTL.Seconds(), cmpopts.EquateApprox(0, 1)) {
 			t.Errorf("TTL = %v, want %v", gotTTL, wantTTL)
